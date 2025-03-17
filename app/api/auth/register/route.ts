@@ -4,8 +4,6 @@ export async function POST(request: NextRequest) {
   try {
     const body = await request.json();
 
-    console.log(body);
-
     const apiRes = await fetch(
       `${process.env.NEXT_PUBLIC_API_BASE_URL}/auth/register`,
       {
@@ -17,15 +15,26 @@ export async function POST(request: NextRequest) {
 
     const data = await apiRes.json();
 
-    if (apiRes.status === 401) {
+    if (apiRes.status === 401 || apiRes.status === 400) {
+      let errorMessages = 'Registration failed.';
+
+      if (data && typeof data === 'object' && !Array.isArray(data)) {
+        errorMessages = Object.entries(data)
+          .map(([key, value]) => {
+            if (Array.isArray(value)) {
+              return `${key}: ${value.join(', ')}`;
+            }
+            return `${key}: ${String(value)}`;
+          })
+          .join(' | ');
+      } else if (typeof data === 'string') {
+        errorMessages = data;
+      }
+
       return NextResponse.json(
-        { error: data.detail },
+        { error: errorMessages },
         { status: apiRes.status }
       );
-    }
-
-    if (apiRes.status === 400) {
-      return NextResponse.json({ error: data }, { status: apiRes.status });
     }
 
     return NextResponse.json({ user: data });

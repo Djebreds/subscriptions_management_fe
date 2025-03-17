@@ -1,5 +1,6 @@
 import { CalendarClock, ChartPie } from 'lucide-react';
 import UserProfile from './user-profile';
+import { SidebarHeader } from '@/components/ui/sidebar';
 import {
   Sidebar,
   SidebarContent,
@@ -29,6 +30,11 @@ export function AppSidebar() {
   return (
     <Sidebar>
       <SidebarContent>
+        <SidebarHeader>
+          <h2 className='text-2xl text-center font-semibold'>
+            Subscriptions Management
+          </h2>
+        </SidebarHeader>
         <SidebarGroup>
           <SidebarGroupLabel>Application</SidebarGroupLabel>
           <SidebarGroupContent>

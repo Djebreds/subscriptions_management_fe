@@ -16,6 +16,7 @@ import React, { useEffect, useState } from 'react';
 import { z } from 'zod';
 import { toast } from 'sonner';
 import { LoaderSpinner } from '@/components/ui/loader-spinner';
+import { setTokenClient } from '@/lib/token-client';
 
 interface Errors {
   username: string;
@@ -70,6 +71,7 @@ export default function RegisterPage() {
   const [showPassword, setShowPassword] = useState(false);
   const [showConfirmPassword, setShowConfirmPassword] = useState(false);
   const [loading, setLoading] = useState(false);
+  const formattedUsername = username.toLowerCase();
 
   useEffect(() => {
     const token = localStorage.getItem('accessToken');
@@ -89,8 +91,6 @@ export default function RegisterPage() {
       password: '',
       confirmPassword: '',
     });
-
-    const formattedUsername = username.toLowerCase();
 
     const validationResult = registerSchema.safeParse({
       firstName,
@@ -123,8 +123,8 @@ export default function RegisterPage() {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          firstName,
-          lastName,
+          first_name: firstName,
+          last_name: lastName,
           username: formattedUsername,
           password,
           confirmPassword,
@@ -133,13 +133,13 @@ export default function RegisterPage() {
 
       const data = await res.json();
 
-      if (data.user) {
-        await handleLogin();
-      } else {
+      if (!data && !data.user) {
         toast.error(data.error, {
           position: 'top-center',
         });
       }
+
+      await handleLogin();
     } catch (error: unknown) {
       console.error(error);
 
@@ -156,13 +156,13 @@ export default function RegisterPage() {
       const res = await fetch('/api/auth/login', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ username, password }),
+        body: JSON.stringify({ username: formattedUsername, password }),
       });
 
       const data = await res.json();
 
       if (data.accessToken) {
-        localStorage.setItem('accessToken', data.accessToken);
+        setTokenClient(data.accessToken, data.refreshToken);
 
         router.push('/dashboard');
       } else {

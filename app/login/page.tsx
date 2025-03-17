@@ -11,6 +11,7 @@ import {
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { LoaderSpinner } from '@/components/ui/loader-spinner';
+import { getTokenClient, setTokenClient } from '@/lib/token-client';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { useEffect, useState } from 'react';
@@ -36,9 +37,9 @@ export default function LoginPage() {
   const [loading, setLoading] = useState(false);
 
   useEffect(() => {
-    const token = localStorage.getItem('accessToken');
+    const { accessToken, refreshToken } = getTokenClient();
 
-    if (token) {
+    if (accessToken && refreshToken) {
       router.push('/dashboard');
     }
   }, [router]);
@@ -72,7 +73,7 @@ export default function LoginPage() {
       const data = await res.json();
 
       if (data.accessToken) {
-        localStorage.setItem('accessToken', data.accessToken);
+        setTokenClient(data.accessToken, data.refreshToken);
 
         router.push('/dashboard');
       } else {

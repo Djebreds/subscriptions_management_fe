@@ -1,3 +1,4 @@
+import { getTokenServer } from '@/lib/token-server';
 import { NextRequest, NextResponse } from 'next/server';
 
 interface User {
@@ -8,9 +9,9 @@ interface User {
 }
 
 export async function GET(request: NextRequest) {
-  const accessToken = request.headers.get('Authorization')?.split(' ')[0];
+  const { accessToken, refreshToken } = await getTokenServer();
 
-  if (!accessToken) {
+  if (!accessToken && !refreshToken) {
     return NextResponse.json({ error: 'Not authenticated' }, { status: 401 });
   }
 

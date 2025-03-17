@@ -1,9 +1,11 @@
-import { cookies } from 'next/headers';
+import { setTokenServer } from '@/lib/token-server';
 import { NextRequest, NextResponse } from 'next/server';
 
 export async function POST(request: NextRequest) {
   try {
     const body = await request.json();
+
+    console.log(body);
 
     const apiRes = await fetch(
       `${process.env.NEXT_PUBLIC_API_BASE_URL}/auth/login`,
@@ -27,23 +29,12 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: data }, { status: apiRes.status });
     }
 
-    const cookieStore = await cookies();
+    await setTokenServer(data.access, data.refresh);
 
-    cookieStore.set('accessToken', data.access, {
-      httpOnly: true,
-      secure: process.env.NODE_ENV === 'production',
-      path: '/',
-      maxAge: 60 * 60,
+    return NextResponse.json({
+      accessToken: data.access,
+      refreshToken: data.refresh,
     });
-
-    cookieStore.set('refreshToken', data.refresh, {
-      httpOnly: true,
-      secure: process.env.NODE_ENV === 'production',
-      path: '/',
-      maxAge: 60 * 60 * 24 * 30,
-    });
-
-    return NextResponse.json({ accessToken: data.access });
   } catch (error: unknown) {
     let errorMessage = 'Something went wrong.';
 

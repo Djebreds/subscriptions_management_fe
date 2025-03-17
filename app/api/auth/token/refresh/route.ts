@@ -1,3 +1,4 @@
+import { getTokenServer } from '@/lib/token-server';
 import { NextRequest, NextResponse } from 'next/server';
 
 interface RefreshResponse {
@@ -6,9 +7,9 @@ interface RefreshResponse {
 
 export async function POST(request: NextRequest) {
   try {
-    const refreshToken = request.cookies.get('refreshToken')?.value;
+    const { accessToken, refreshToken } = await getTokenServer();
 
-    if (!refreshToken) {
+    if (!refreshToken && !accessToken) {
       return NextResponse.json({ error: 'No refresh token' }, { status: 401 });
     }
 

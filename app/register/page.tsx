@@ -90,10 +90,12 @@ export default function RegisterPage() {
       confirmPassword: '',
     });
 
+    const formattedUsername = username.toLowerCase();
+
     const validationResult = registerSchema.safeParse({
       firstName,
       lastName,
-      username,
+      username: formattedUsername,
       password,
       confirmPassword,
     });
@@ -123,7 +125,7 @@ export default function RegisterPage() {
         body: JSON.stringify({
           firstName,
           lastName,
-          username,
+          username: formattedUsername,
           password,
           confirmPassword,
         }),
@@ -131,10 +133,19 @@ export default function RegisterPage() {
 
       const data = await res.json();
 
-      if (data.user) await handleLogin();
+      if (data.user) {
+        await handleLogin();
+      } else {
+        toast.error(data.error, {
+          position: 'top-center',
+        });
+      }
     } catch (error: unknown) {
       console.error(error);
-      toast.error('Something went wrong.');
+
+      toast.error('Something went wrong.', {
+        position: 'top-center',
+      });
     } finally {
       setLoading(false);
     }

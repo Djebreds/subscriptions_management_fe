@@ -19,11 +19,6 @@ const items = [
     url: '/dashboard',
     icon: ChartPie,
   },
-  {
-    title: 'Subscriptions',
-    url: '#',
-    icon: CalendarClock,
-  },
 ];
 
 export function AppSidebar() {

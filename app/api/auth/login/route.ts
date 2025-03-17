@@ -5,8 +5,6 @@ export async function POST(request: NextRequest) {
   try {
     const body = await request.json();
 
-    console.log(body);
-
     const apiRes = await fetch(
       `${process.env.NEXT_PUBLIC_API_BASE_URL}/auth/login`,
       {

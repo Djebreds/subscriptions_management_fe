@@ -22,14 +22,18 @@ export async function POST(request: NextRequest) {
       }
     );
 
+    const data: RefreshResponse = await apiRes.json();
+
+    if (apiRes.status === 400) {
+      return NextResponse.json({ error: data }, { status: apiRes.status });
+    }
+
     if (!apiRes.ok) {
       return NextResponse.json(
         { error: 'Token refresh failed' },
         { status: apiRes.status }
       );
     }
-
-    const data: RefreshResponse = await apiRes.json();
 
     return NextResponse.json({ accessToken: data.access });
   } catch (error) {

@@ -1,12 +1,13 @@
+import { refreshAccessToken } from '@/lib/refresh-token';
 import { getTokenServer } from '@/lib/token-server';
 import { NextRequest, NextResponse } from 'next/server';
 
-interface User {
-  id: number;
-  first_name: string;
-  last_name: string;
-  username: string;
-}
+// interface User {
+//   id: number;
+//   first_name: string;
+//   last_name: string;
+//   username: string;
+// }
 
 export async function GET(request: NextRequest) {
   const { accessToken, refreshToken } = await getTokenServer();
@@ -26,11 +27,11 @@ export async function GET(request: NextRequest) {
       }
     );
 
-    if (!apiRes.ok) {
-      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+    if (!apiRes.ok && apiRes.status === 401) {
+      await refreshAccessToken(request, refreshToken);
     }
 
-    const user: User = await apiRes.json();
+    const user = await apiRes.json();
 
     return NextResponse.json({ user });
   } catch (error: unknown) {

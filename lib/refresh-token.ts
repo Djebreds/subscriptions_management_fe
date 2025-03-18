@@ -1,10 +1,6 @@
 import { cookies } from 'next/headers';
-import { NextRequest } from 'next/server';
 
-export async function refreshAccessToken(
-  request: NextRequest,
-  refreshToken: string | undefined
-): Promise<string | null> {
+export async function refreshAccessToken(refreshToken: string) {
   try {
     const cookieStore = await cookies();
 
@@ -18,7 +14,7 @@ export async function refreshAccessToken(
     );
 
     if (!refreshRes.ok) {
-      return null;
+      return undefined;
     }
 
     const data = await refreshRes.json();
@@ -26,9 +22,12 @@ export async function refreshAccessToken(
     cookieStore.set('accessToken', data.access);
     cookieStore.set('refreshToken', data.refresh);
 
-    return data.accessToken;
+    return {
+      accessToken: data.accessToken as string,
+      refreshToken: data.refreshToken as string,
+    };
   } catch (error) {
     console.error('Error refreshing token:', error);
-    return null;
+    return undefined;
   }
 }

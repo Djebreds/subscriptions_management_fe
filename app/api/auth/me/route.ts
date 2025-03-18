@@ -2,13 +2,6 @@ import { refreshAccessToken } from '@/lib/refresh-token';
 import { getTokenServer } from '@/lib/token-server';
 import { NextRequest, NextResponse } from 'next/server';
 
-// interface User {
-//   id: number;
-//   first_name: string;
-//   last_name: string;
-//   username: string;
-// }
-
 export async function GET(request: NextRequest) {
   const { accessToken, refreshToken } = await getTokenServer();
 
@@ -28,7 +21,7 @@ export async function GET(request: NextRequest) {
     );
 
     if (!apiRes.ok && apiRes.status === 401) {
-      await refreshAccessToken(request, refreshToken);
+      await refreshAccessToken(refreshToken);
     }
 
     const user = await apiRes.json();

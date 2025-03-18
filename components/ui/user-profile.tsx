@@ -27,36 +27,47 @@ export default function UserProfile() {
 
       if (!accessToken && !refreshToken) {
         router.push('/login');
+        return;
       }
 
-      if (accessToken && refreshToken) {
-        const refreshRes = await fetch('/api/auth/token/refresh', {
-          method: 'POST',
-        });
-
-        if (refreshRes.ok) {
-          const refreshData = await refreshRes.json();
-
-          setTokenClient(refreshData.accessToken, refreshData.refreshToken);
-        } else {
-          return setUser(null);
-        }
-      }
-
-      const res = await fetch('/api/auth/me', {
+      let res = await fetch('/api/auth/me', {
+        method: 'GET',
         headers: { Authorization: `Bearer ${accessToken}` },
       });
 
-      if (res.ok) {
-        const data = await res.json();
-        setUser(data.user);
-      } else {
-        setUser(null);
+      if (res.status === 401 && refreshToken) {
+        const refreshResponse = await fetch('/api/auth/refresh', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ refreshToken }),
+        });
+
+        if (refreshResponse.ok) {
+          const { accessToken: newAccessToken } = await refreshResponse.json();
+
+          setTokenClient(accessToken as string, refreshToken);
+
+          res = await fetch('/api/auth/me', {
+            method: 'GET',
+            headers: { Authorization: `Bearer ${newAccessToken}` },
+          });
+
+          if (!res.ok) {
+            router.push('/login');
+            return;
+          }
+        } else {
+          router.push('/login');
+          return;
+        }
       }
+
+      const userData = await res.json();
+      setUser(userData.user);
     }
 
     fetchUser();
-  }, []);
+  }, [router]);
 
   async function handleLogout() {
     const res = await fetch('/api/auth/logout');

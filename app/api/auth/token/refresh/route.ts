@@ -1,19 +1,10 @@
-import { getTokenServer } from '@/lib/token-server';
-import { NextRequest, NextResponse } from 'next/server';
+import { cookies } from 'next/headers';
 
-interface RefreshResponse {
-  access: string;
-}
-
-export async function POST(request: NextRequest) {
+export async function refreshAccessToken(refreshToken: string) {
   try {
-    const { accessToken, refreshToken } = await getTokenServer();
+    const cookieStore = await cookies();
 
-    if (!refreshToken && !accessToken) {
-      return NextResponse.json({ error: 'No refresh token' }, { status: 401 });
-    }
-
-    const apiRes = await fetch(
+    const refreshRes = await fetch(
       `${process.env.NEXT_PUBLIC_API_BASE_URL}/auth/token/refresh`,
       {
         method: 'POST',
@@ -22,27 +13,21 @@ export async function POST(request: NextRequest) {
       }
     );
 
-    const data: RefreshResponse = await apiRes.json();
-
-    if (apiRes.status === 400) {
-      return NextResponse.json({ error: data }, { status: apiRes.status });
+    if (!refreshRes.ok) {
+      return undefined;
     }
 
-    if (!apiRes.ok) {
-      return NextResponse.json(
-        { error: 'Token refresh failed' },
-        { status: apiRes.status }
-      );
-    }
+    const data = await refreshRes.json();
 
-    return NextResponse.json({ accessToken: data.access });
+    cookieStore.set('accessToken', data.access);
+    cookieStore.set('refreshToken', data.refresh);
+
+    return {
+      accessToken: data.accessToken as string,
+      refreshToken: data.refreshToken as string,
+    };
   } catch (error) {
-    let errorMessage = 'Something went wrong.';
-
-    if (error instanceof Error) {
-      errorMessage = error.message;
-    }
-
-    return NextResponse.json({ error: errorMessage }, { status: 500 });
+    console.error('Error refreshing token:', error);
+    return undefined;
   }
 }

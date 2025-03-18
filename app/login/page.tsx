@@ -30,8 +30,8 @@ const loginSchema = z.object({
 
 export default function LoginPage() {
   const router = useRouter();
-  const [username, setUsername] = useState('');
-  const [password, setPassword] = useState('');
+  const [username, setUsername] = useState('djebreds');
+  const [password, setPassword] = useState('Password@123');
   const [showPassword, setShowPassword] = useState(false);
   const [errors, setErrors] = useState<Errors>({ username: '', password: '' });
   const [loading, setLoading] = useState(false);
@@ -72,7 +72,7 @@ export default function LoginPage() {
 
       const data = await res.json();
 
-      if (data.accessToken) {
+      if (data.accessToken && data.refreshToken) {
         setTokenClient(data.accessToken, data.refreshToken);
 
         router.push('/dashboard');

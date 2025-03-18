@@ -22,6 +22,16 @@ import {
   TableHeader,
   TableRow,
 } from '@/components/ui/table';
+import { toast } from 'sonner';
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select';
+import { z } from 'zod';
+import { LoaderSpinner } from '../../components/ui/loader-spinner';
 
 const SubscriptionModel = {
   fetchAll: () => fetch('/api/subscriptions').then((res) => res.json()),
@@ -45,17 +55,41 @@ const SubscriptionModel = {
   },
 };
 
+interface Errors {
+  serviceName: string;
+  price: string;
+  billingCyle: string;
+}
+
+const subscriptionSchema = z.object({
+  serviceName: z.string().nonempty({ message: 'Service Name is required.' }),
+  price: z
+    .string()
+    .regex(/^[0-9]+(\.[0-9]{1,2})?$/, 'Price must be a valid number'),
+  billingCycle: z.enum(['monthly', 'annual'], {
+    errorMap: () => ({ message: 'Billing cycle is required' }),
+  }),
+});
+
 export default function SubscriptionDashboard() {
   const [subscriptions, setSubscriptions] = useState([]);
   const [totalMonthlySpend, setTotalMonthlySpend] = useState(0);
   const [darkMode, setDarkMode] = useState(false);
   const { setTheme } = useTheme();
   const [csvFile, setCsvFile] = useState(null);
-  const [form, setForm] = useState({
-    service_name: '',
+  const [serviceName, setServiceName] = useState('');
+  const [price, setPrice] = useState('');
+  const [billingCycle, setBillingCycle] = useState('');
+  const [errors, setErrors] = useState<Errors>({
+    serviceName: '',
     price: '',
-    billing_cycle: '',
+    billingCyle: '',
   });
+  const [loading, setLoading] = useState(false);
+
+  useEffect(() => {
+    loadSubscriptions();
+  }, []);
 
   const [modalOpen, setModalOpen] = useState(false);
   const [confirmDeleteOpen, setConfirmDeleteOpen] = useState(false);
@@ -83,11 +117,64 @@ export default function SubscriptionDashboard() {
     setTheme(darkMode ? 'light' : 'dark');
   };
 
-  const handleCreateSubscription = async () => {
-    const data = await SubscriptionModel.create(form);
-    setSubscriptions([...subscriptions, data]);
-    calculateTotalSpend([...subscriptions, data]);
-    setModalOpen(false);
+  const handleCreateSubscription = async (
+    e: React.FormEvent<HTMLFormElement>
+  ) => {
+    e.preventDefault();
+    setErrors({ serviceName: '', price: '', billingCyle: '' });
+
+    const validationResult = subscriptionSchema.safeParse({
+      serviceName,
+      price,
+      billingCycle,
+    });
+
+    if (!validationResult.success) {
+      const fieldErrors = validationResult.error.flatten().fieldErrors;
+
+      setErrors({
+        serviceName: fieldErrors.serviceName
+          ? fieldErrors.serviceName.join(' ')
+          : '',
+        price: fieldErrors.price ? fieldErrors.price.join(' ') : '',
+        billingCyle: fieldErrors.billingCycle
+          ? fieldErrors.billingCycle.join(' ')
+          : '',
+      });
+
+      return;
+    }
+
+    setLoading(true);
+
+    try {
+      const res = await fetch('/api/subscriptions', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          service_name: serviceName,
+          price: parseFloat(price),
+          billing_cycle: billingCycle,
+        }),
+      });
+
+      const data = await res.json();
+
+      setSubscriptions([...subscriptions, data]);
+      calculateTotalSpend([...subscriptions, data]);
+
+      setServiceName('');
+      setPrice('');
+      setBillingCycle('');
+      setModalOpen(false);
+
+      toast.success('New subscription added.', { position: 'top-center' });
+    } catch (error: unknown) {
+      console.error(error);
+      toast.error('Something went wrong', { position: 'top-center' });
+    } finally {
+      setLoading(false);
+    }
   };
 
   const confirmDelete = (id) => {
@@ -96,13 +183,27 @@ export default function SubscriptionDashboard() {
   };
 
   const handleDeleteSubscription = async () => {
-    await SubscriptionModel.delete(selectedId);
-    const updatedSubscriptions = subscriptions.filter(
-      (sub) => sub.id !== selectedId
-    );
-    setSubscriptions(updatedSubscriptions);
-    calculateTotalSpend(updatedSubscriptions);
-    setConfirmDeleteOpen(false);
+    try {
+      await fetch(`/api/subscriptions/?id=${selectedId}`, {
+        method: 'DELETE',
+      });
+
+      const updatedSubscriptions = subscriptions.filter(
+        (sub) => sub.id !== selectedId
+      );
+
+      setSubscriptions(updatedSubscriptions);
+      calculateTotalSpend(updatedSubscriptions);
+      setConfirmDeleteOpen(false);
+      setLoading(true);
+
+      toast.success('Subscription has been deleted.', {
+        position: 'top-center',
+      });
+    } catch (error: unknown) {
+      console.error(error);
+      toast.error('Something went wrong.', { position: 'top-center' });
+    }
   };
 
   const handleCSVImport = async () => {
@@ -140,23 +241,55 @@ export default function SubscriptionDashboard() {
           <DialogHeader>
             <DialogTitle>Add New Subscription</DialogTitle>
           </DialogHeader>
-          <Input
-            placeholder='Service Name'
-            onChange={(e) => setForm({ ...form, service_name: e.target.value })}
-          />
-          <Input
-            placeholder='Price'
-            onChange={(e) => setForm({ ...form, price: e.target.value })}
-          />
-          <Input
-            placeholder='Billing Cycle'
-            onChange={(e) =>
-              setForm({ ...form, billing_cycle: e.target.value })
-            }
-          />
-          <Button onClick={handleCreateSubscription} className='mt-2'>
-            Create
-          </Button>
+          <form onSubmit={handleCreateSubscription}>
+            <div className='mb-3'>
+              <Input
+                placeholder='Service Name'
+                value={serviceName}
+                onChange={(e) => setServiceName(e.target.value)}
+              />
+              {errors.serviceName && (
+                <p className='text-red-500 text-sm'>{errors.serviceName}</p>
+              )}
+            </div>
+
+            <div className='mb-3'>
+              <Input
+                placeholder='Price'
+                type='text'
+                value={price}
+                onChange={(e) => setPrice(e.target.value)}
+              />
+              {errors.price && (
+                <p className='text-red-500 text-sm'>{errors.price}</p>
+              )}
+            </div>
+
+            <div className='mb-3'>
+              <Select onValueChange={(value) => setBillingCycle(value)}>
+                <SelectTrigger className='w-full'>
+                  <SelectValue placeholder='Billing Cycle' />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value='monthly'>Monthly</SelectItem>
+                  <SelectItem value='annual'>Annual</SelectItem>
+                </SelectContent>
+              </Select>
+              {errors.billingCyle && (
+                <p className='text-red-500 text-sm'>{errors.billingCyle}</p>
+              )}
+            </div>
+
+            <Button type='submit' className='mt-2 w-full' disabled={loading}>
+              {loading ? (
+                <>
+                  <LoaderSpinner className='text-center' />
+                </>
+              ) : (
+                'Create'
+              )}
+            </Button>
+          </form>
         </DialogContent>
       </Dialog>
 
@@ -184,7 +317,7 @@ export default function SubscriptionDashboard() {
                   onClick={() => confirmDelete(sub.id)}
                   className='ml-2'
                 >
-                  Delete
+                  Cancel
                 </Button>
               </TableCell>
             </TableRow>
@@ -193,7 +326,7 @@ export default function SubscriptionDashboard() {
       </Table>
 
       <Dialog open={detailModalOpen} onOpenChange={setDetailModalOpen}>
-        <DialogContent>
+        <DialogContent className='p-10'>
           <DialogHeader>
             <DialogTitle>Subscription Details</DialogTitle>
           </DialogHeader>
@@ -226,10 +359,21 @@ export default function SubscriptionDashboard() {
           <DialogHeader>
             <DialogTitle>Confirm Deletion</DialogTitle>
           </DialogHeader>
-          <p>Are you sure you want to delete this subscription?</p>
+          <p>Are you sure you want to cancel this subscription?</p>
           <DialogFooter>
-            <Button variant='destructive' onClick={handleDeleteSubscription}>
-              Confirm
+            <Button
+              variant='destructive'
+              type='submit'
+              onClick={handleDeleteSubscription}
+              disabled={loading}
+            >
+              {loading ? (
+                <>
+                  <LoaderSpinner className='text-center' />
+                </>
+              ) : (
+                'Confirm'
+              )}
             </Button>
           </DialogFooter>
         </DialogContent>

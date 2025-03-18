@@ -34,6 +34,14 @@ import { z } from 'zod';
 import { LoaderSpinner } from '../../components/ui/loader-spinner';
 import { SkeletonTable } from '../../components/ui/skeleton-table';
 import { useDebouncedCallback } from 'use-debounce';
+import {
+  Bar,
+  BarChart,
+  ResponsiveContainer,
+  Tooltip,
+  XAxis,
+  YAxis,
+} from 'recharts';
 
 const SubscriptionModel = {
   importCSV: (file) => {
@@ -92,6 +100,14 @@ export default function SubscriptionDashboard() {
   const [selectedId, setSelectedId] = useState(null);
   const [detailModalOpen, setDetailModalOpen] = useState(false);
   const [selectedSubscription, setSelectedSubscription] = useState(null);
+  const [nextPage, setNextPage] = useState(null);
+  const [prevPage, setPrevPage] = useState(null);
+  const [renewalAlerts, setRenewalAlerts] = useState([]);
+  const [costBreakdown, setCostBreakdown] = useState([]);
+  const [updateModalOpen, setUpdateModalOpen] = useState(false);
+  const [updateServiceName, setUpdateServiceName] = useState('');
+  const [updatePrice, setUpdatePrice] = useState('');
+  const [updateBillingCycle, setUpdateBillingCycle] = useState('');
 
   useEffect(() => {
     loadSubscriptions();
@@ -108,16 +124,30 @@ export default function SubscriptionDashboard() {
     return params.toString();
   };
 
+  const openUpdateModal = (subscription) => {
+    setSelectedSubscription(subscription);
+    setUpdateServiceName(subscription.service_name);
+    setUpdatePrice(subscription.price.toString());
+    setUpdateBillingCycle(subscription.billing_cycle);
+    setUpdateModalOpen(true);
+  };
+
   const loadSubscriptions = async () => {
     try {
       setLoading(true);
+      console.log('Fetching with query params:', buildQueryParams());
       const res = await fetch(`/api/subscriptions?${buildQueryParams()}`);
       const data = await res.json();
 
       if (res.ok) {
         setSubscriptions(data.results || []);
-        setTotalPages(data.total_pages || 1);
+        setNextPage(data.next);
+        setPrevPage(data.previous);
         calculateTotalSpend(data.results || []);
+        setSubscriptions(data.results || []);
+        calculateTotalSpend(data.results || []);
+        generateRenewalAlerts(data.results || []);
+        prepareCostBreakdown(data.results || []);
       }
     } catch (error) {
       console.error(error);
@@ -197,6 +227,71 @@ export default function SubscriptionDashboard() {
     }
   };
 
+  const handleUpdateSubscription = async (
+    e: React.FormEvent<HTMLFormElement>
+  ) => {
+    e.preventDefault();
+    setErrors({ serviceName: '', price: '', billingCyle: '' });
+
+    const validationResult = subscriptionSchema.safeParse({
+      serviceName: updateServiceName,
+      price: updatePrice,
+      billingCycle: updateBillingCycle,
+    });
+
+    if (!validationResult.success) {
+      const fieldErrors = validationResult.error.flatten().fieldErrors;
+
+      setErrors({
+        serviceName: fieldErrors.serviceName
+          ? fieldErrors.serviceName.join(' ')
+          : '',
+        price: fieldErrors.price ? fieldErrors.price.join(' ') : '',
+        billingCyle: fieldErrors.billingCycle
+          ? fieldErrors.billingCycle.join(' ')
+          : '',
+      });
+
+      return;
+    }
+
+    setLoading(true);
+
+    try {
+      const res = await fetch(
+        `/api/subscriptions/?id=${selectedSubscription.id}`,
+        {
+          method: 'PATCH',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            service_name: updateServiceName,
+            price: parseFloat(updatePrice),
+            billing_cycle: updateBillingCycle,
+          }),
+        }
+      );
+
+      const data = await res.json();
+
+      // Update the local state with the updated subscription details
+      const updatedSubscriptions = subscriptions.map((sub) =>
+        sub.id === data.id ? data : sub
+      );
+      setSubscriptions(updatedSubscriptions);
+      calculateTotalSpend(updatedSubscriptions);
+
+      setUpdateModalOpen(false);
+      toast.success('Subscription updated successfully.', {
+        position: 'top-center',
+      });
+    } catch (error: unknown) {
+      console.error(error);
+      toast.error('Something went wrong', { position: 'top-center' });
+    } finally {
+      setLoading(false);
+    }
+  };
+
   const confirmDelete = (id) => {
     setSelectedId(id);
     setConfirmDeleteOpen(true);
@@ -227,6 +322,35 @@ export default function SubscriptionDashboard() {
     } finally {
       setLoading(false);
     }
+  };
+
+  const generateRenewalAlerts = (data) => {
+    const today = new Date();
+    const upcomingRenewals = data.filter((sub) => {
+      const renewalDate = new Date(sub.renewal_date);
+      const daysLeft = Math.ceil((renewalDate - today) / (1000 * 60 * 60 * 24));
+      return daysLeft <= 7;
+    });
+
+    setRenewalAlerts(upcomingRenewals);
+  };
+
+  const prepareCostBreakdown = (data) => {
+    const breakdown = data.reduce((acc, sub) => {
+      const existing = acc.find(
+        (item) => item.service_name === sub.service_name
+      );
+      if (existing) {
+        existing.price += parseFloat(sub.price);
+      } else {
+        acc.push({
+          service_name: sub.service_name,
+          price: parseFloat(sub.price),
+        });
+      }
+      return acc;
+    }, []);
+    setCostBreakdown(breakdown);
   };
 
   const handleCSVImport = async () => {
@@ -266,6 +390,48 @@ export default function SubscriptionDashboard() {
           </h2>
         </CardContent>
       </Card>
+
+      {/* Cost Breakdown Chart */}
+      <div className='mt-6'>
+        <h3 className='text-lg font-semibold'>Cost Breakdown by Service</h3>
+        <ResponsiveContainer width='100%' height={300}>
+          <BarChart data={costBreakdown}>
+            <XAxis dataKey='service_name' />
+            <YAxis />
+            <Tooltip />
+            <Bar dataKey='price' fill='#3182CE' />
+          </BarChart>
+        </ResponsiveContainer>
+      </div>
+
+      {/* Renewal Alerts */}
+      {renewalAlerts.length > 0 && (
+        <div className='mt-6 p-4 bg-yellow-100 text-yellow-800 rounded'>
+          <h3 className='text-lg font-semibold'>
+            Upcoming Renewals (Next 7 Days)
+          </h3>
+          <ul>
+            {renewalAlerts.map((sub) => (
+              <li key={sub.id}>
+                {sub.service_name} - Renewal on{' '}
+                {new Date(sub.renewal_date).toLocaleDateString()}
+              </li>
+            ))}
+          </ul>
+        </div>
+      )}
+
+      <div className='mt-6 p-4 bg-blue-100 text-blue-800 rounded'>
+        <h3 className='text-lg font-semibold'>Savings Comparison</h3>
+        {subscriptions.map((sub) =>
+          sub.billing_cycle === 'monthly' ? (
+            <p key={sub.id}>
+              {sub.service_name}: If you switch to annual, you’ll save{' '}
+              {(sub.price * 12 * 0.8).toFixed(2)}﷼ per year.
+            </p>
+          ) : null
+        )}
+      </div>
 
       <Dialog open={modalOpen} onOpenChange={setModalOpen}>
         <DialogTrigger asChild>
@@ -394,8 +560,17 @@ export default function SubscriptionDashboard() {
                     {new Date(sub.renewal_date).toLocaleDateString()}
                   </TableCell>
                   <TableCell>
-                    <Button onClick={() => openDetailModal(sub)}>
+                    <Button
+                      className='ml-2'
+                      onClick={() => openDetailModal(sub)}
+                    >
                       Details
+                    </Button>
+                    <Button
+                      className='ml-2'
+                      onClick={() => openUpdateModal(sub)}
+                    >
+                      Edit
                     </Button>
                     <Button
                       variant='destructive'
@@ -411,23 +586,75 @@ export default function SubscriptionDashboard() {
           </Table>
           <div className='flex justify-between mt-4'>
             <Button
-              onClick={() => setPage((prev) => Math.max(prev - 1, 1))}
-              disabled={page === 1}
+              onClick={() => setPage((prev) => prev - 1)}
+              disabled={!prevPage}
             >
               Previous
             </Button>
-            <span>
-              Page {page} of {totalPages}
-            </span>
+            <span>Page {page}</span>
             <Button
-              onClick={() => setPage((prev) => Math.min(prev + 1, totalPages))}
-              disabled={page === totalPages}
+              onClick={() => setPage((prev) => prev + 1)}
+              disabled={!nextPage}
             >
               Next
             </Button>
           </div>
         </>
       )}
+
+      <Dialog open={updateModalOpen} onOpenChange={setUpdateModalOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Edit Subscription</DialogTitle>
+          </DialogHeader>
+          <form onSubmit={handleUpdateSubscription}>
+            <div className='mb-3'>
+              <Input
+                placeholder='Service Name'
+                value={updateServiceName}
+                onChange={(e) => setUpdateServiceName(e.target.value)}
+              />
+              {errors.serviceName && (
+                <p className='text-red-500 text-sm'>{errors.serviceName}</p>
+              )}
+            </div>
+
+            <div className='mb-3'>
+              <Input
+                placeholder='Price'
+                type='number'
+                value={updatePrice}
+                onChange={(e) => setUpdatePrice(e.target.value)}
+              />
+              {errors.price && (
+                <p className='text-red-500 text-sm'>{errors.price}</p>
+              )}
+            </div>
+
+            <div className='mb-3'>
+              <Select
+                onValueChange={(value) => setUpdateBillingCycle(value)}
+                defaultValue={updateBillingCycle}
+              >
+                <SelectTrigger className='w-full'>
+                  <SelectValue placeholder='Billing Cycle' />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value='monthly'>Monthly</SelectItem>
+                  <SelectItem value='annual'>Annual</SelectItem>
+                </SelectContent>
+              </Select>
+              {errors.billingCyle && (
+                <p className='text-red-500 text-sm'>{errors.billingCyle}</p>
+              )}
+            </div>
+
+            <Button type='submit' className='mt-2 w-full' disabled={loading}>
+              {loading ? <LoaderSpinner className='text-center' /> : 'Update'}
+            </Button>
+          </form>
+        </DialogContent>
+      </Dialog>
 
       <Dialog open={detailModalOpen} onOpenChange={setDetailModalOpen}>
         <DialogContent className='p-10'>

@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { Card, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Switch } from '@/components/ui/switch';
@@ -33,9 +33,9 @@ import {
 import { z } from 'zod';
 import { LoaderSpinner } from '../../components/ui/loader-spinner';
 import { SkeletonTable } from '../../components/ui/skeleton-table';
+import { useDebouncedCallback } from 'use-debounce';
 
 const SubscriptionModel = {
-  fetchAll: () => fetch('/api/subscriptions').then((res) => res.json()),
   importCSV: (file) => {
     const formData = new FormData();
     formData.append('file', file);
@@ -76,12 +76,17 @@ export default function SubscriptionDashboard() {
     price: '',
     billingCyle: '',
   });
+  const [filters, setFilters] = useState({
+    service_name: '',
+    billing_cycle: '',
+    min_price: '',
+    max_price: '',
+    min_renewal_date: '',
+    max_renewal_date: '',
+  });
+  const [page, setPage] = useState(1);
+  const [totalPages, setTotalPages] = useState(1);
   const [loading, setLoading] = useState(false);
-
-  useEffect(() => {
-    loadSubscriptions();
-  }, []);
-
   const [modalOpen, setModalOpen] = useState(false);
   const [confirmDeleteOpen, setConfirmDeleteOpen] = useState(false);
   const [selectedId, setSelectedId] = useState(null);
@@ -90,23 +95,33 @@ export default function SubscriptionDashboard() {
 
   useEffect(() => {
     loadSubscriptions();
-  }, []);
+  }, [page, filters]);
+
+  const buildQueryParams = () => {
+    const params = new URLSearchParams();
+    params.append('page', page.toString());
+
+    Object.entries(filters).forEach(([key, value]) => {
+      if (value) params.append(key, value);
+    });
+
+    return params.toString();
+  };
 
   const loadSubscriptions = async () => {
     try {
       setLoading(true);
-      const res = await fetch('/api/subscriptions');
+      const res = await fetch(`/api/subscriptions?${buildQueryParams()}`);
       const data = await res.json();
 
       if (res.ok) {
         setSubscriptions(data.results || []);
+        setTotalPages(data.total_pages || 1);
         calculateTotalSpend(data.results || []);
       }
-    } catch (error: unknown) {
+    } catch (error) {
       console.error(error);
-      toast.error('Something went wrong.', {
-        position: 'top-center',
-      });
+      toast.error('Something went wrong.', { position: 'top-center' });
     } finally {
       setLoading(false);
     }
@@ -226,6 +241,17 @@ export default function SubscriptionDashboard() {
     setDetailModalOpen(true);
   };
 
+  const debouncedFilterUpdate = useDebouncedCallback((newFilters) => {
+    setFilters(newFilters);
+    loadSubscriptions();
+  }, 500);
+
+  const handleFilterChange = (e) => {
+    const { name, value } = e.target;
+    const updatedFilters = { ...filters, [name]: value.trim() };
+    debouncedFilterUpdate(updatedFilters);
+  };
+
   return (
     <div className='p-6 max-w-4xl mx-auto'>
       <div className='flex justify-between items-center mb-4'>
@@ -264,7 +290,7 @@ export default function SubscriptionDashboard() {
             <div className='mb-3'>
               <Input
                 placeholder='Price'
-                type='text'
+                type='number'
                 value={price}
                 onChange={(e) => setPrice(e.target.value)}
               />
@@ -301,42 +327,106 @@ export default function SubscriptionDashboard() {
         </DialogContent>
       </Dialog>
 
+      <div className='grid grid-cols-2 gap-4 mt-4'>
+        <Input
+          name='service_name'
+          placeholder='Service Name'
+          onChange={handleFilterChange}
+        />
+        <Select
+          onValueChange={(value) =>
+            setFilters((prev) => ({ ...prev, billing_cycle: value }))
+          }
+        >
+          <SelectTrigger className='w-full'>
+            <SelectValue placeholder='Billing Cycle' />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value='monthly'>Monthly</SelectItem>
+            <SelectItem value='annual'>Annual</SelectItem>
+          </SelectContent>
+        </Select>
+        <Input
+          name='min_price'
+          type='number'
+          placeholder='Min Price'
+          onChange={handleFilterChange}
+        />
+        <Input
+          name='max_price'
+          type='number'
+          placeholder='Max Price'
+          onChange={handleFilterChange}
+        />
+        <Input
+          name='min_renewal_date'
+          type='date'
+          onChange={handleFilterChange}
+        />
+        <Input
+          name='max_renewal_date'
+          type='date'
+          onChange={handleFilterChange}
+        />
+      </div>
+
       {loading ? (
         <>
           <SkeletonTable />
         </>
       ) : (
-        <Table className='mt-6 w-full'>
-          <TableHeader>
-            <TableRow>
-              <TableHead>Service</TableHead>
-              <TableHead>Monthly Cost</TableHead>
-              <TableHead>Renewal Date</TableHead>
-              <TableHead>Actions</TableHead>
-            </TableRow>
-          </TableHeader>
-          <TableBody>
-            {subscriptions.map((sub) => (
-              <TableRow key={sub.id}>
-                <TableCell>{sub.service_name}</TableCell>
-                <TableCell>{sub.price}﷼</TableCell>
-                <TableCell>
-                  {new Date(sub.renewal_date).toLocaleDateString()}
-                </TableCell>
-                <TableCell>
-                  <Button onClick={() => openDetailModal(sub)}>Details</Button>
-                  <Button
-                    variant='destructive'
-                    onClick={() => confirmDelete(sub.id)}
-                    className='ml-2'
-                  >
-                    Cancel
-                  </Button>
-                </TableCell>
+        <>
+          <Table className='mt-6 w-full'>
+            <TableHeader>
+              <TableRow>
+                <TableHead>Service</TableHead>
+                <TableHead>Monthly Cost</TableHead>
+                <TableHead>Renewal Date</TableHead>
+                <TableHead>Actions</TableHead>
               </TableRow>
-            ))}
-          </TableBody>
-        </Table>
+            </TableHeader>
+            <TableBody>
+              {subscriptions.map((sub) => (
+                <TableRow key={sub.id}>
+                  <TableCell>{sub.service_name}</TableCell>
+                  <TableCell>{sub.price}﷼</TableCell>
+                  <TableCell>
+                    {new Date(sub.renewal_date).toLocaleDateString()}
+                  </TableCell>
+                  <TableCell>
+                    <Button onClick={() => openDetailModal(sub)}>
+                      Details
+                    </Button>
+                    <Button
+                      variant='destructive'
+                      onClick={() => confirmDelete(sub.id)}
+                      className='ml-2'
+                    >
+                      Cancel
+                    </Button>
+                  </TableCell>
+                </TableRow>
+              ))}
+            </TableBody>
+          </Table>
+          <div className='flex justify-between mt-4'>
+            <Button
+              onClick={() => setPage((prev) => Math.max(prev - 1, 1))}
+              disabled={page === 1}
+            >
+              Previous
+            </Button>
+            <span>
+              Page {page} of {totalPages}
+            </span>
+            <Button
+              onClick={() => setPage((prev) => Math.min(prev + 1, totalPages))}
+              disabled={page === totalPages}
+            >
+              Next
+            </Button>
+          </div>
+        </>
       )}
 
       <Dialog open={detailModalOpen} onOpenChange={setDetailModalOpen}>

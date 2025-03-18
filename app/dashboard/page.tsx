@@ -32,19 +32,10 @@ import {
 } from '@/components/ui/select';
 import { z } from 'zod';
 import { LoaderSpinner } from '../../components/ui/loader-spinner';
+import { SkeletonTable } from '../../components/ui/skeleton-table';
 
 const SubscriptionModel = {
   fetchAll: () => fetch('/api/subscriptions').then((res) => res.json()),
-  create: (data) =>
-    fetch('/api/subscriptions', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(data),
-    }).then((res) => res.json()),
-  delete: (id) =>
-    fetch(`/api/subscriptions?id=${id}`, {
-      method: 'DELETE',
-    }).then((res) => res.json()),
   importCSV: (file) => {
     const formData = new FormData();
     formData.append('file', file);
@@ -102,9 +93,23 @@ export default function SubscriptionDashboard() {
   }, []);
 
   const loadSubscriptions = async () => {
-    const data = await SubscriptionModel.fetchAll();
-    setSubscriptions(data.results || []);
-    calculateTotalSpend(data.results || []);
+    try {
+      setLoading(true);
+      const res = await fetch('/api/subscriptions');
+      const data = await res.json();
+
+      if (res.ok) {
+        setSubscriptions(data.results || []);
+        calculateTotalSpend(data.results || []);
+      }
+    } catch (error: unknown) {
+      console.error(error);
+      toast.error('Something went wrong.', {
+        position: 'top-center',
+      });
+    } finally {
+      setLoading(false);
+    }
   };
 
   const calculateTotalSpend = (data) => {
@@ -184,6 +189,8 @@ export default function SubscriptionDashboard() {
 
   const handleDeleteSubscription = async () => {
     try {
+      setLoading(true);
+
       await fetch(`/api/subscriptions/?id=${selectedId}`, {
         method: 'DELETE',
       });
@@ -195,7 +202,6 @@ export default function SubscriptionDashboard() {
       setSubscriptions(updatedSubscriptions);
       calculateTotalSpend(updatedSubscriptions);
       setConfirmDeleteOpen(false);
-      setLoading(true);
 
       toast.success('Subscription has been deleted.', {
         position: 'top-center',
@@ -203,6 +209,8 @@ export default function SubscriptionDashboard() {
     } catch (error: unknown) {
       console.error(error);
       toast.error('Something went wrong.', { position: 'top-center' });
+    } finally {
+      setLoading(false);
     }
   };
 
@@ -293,37 +301,43 @@ export default function SubscriptionDashboard() {
         </DialogContent>
       </Dialog>
 
-      <Table className='mt-6'>
-        <TableHeader>
-          <TableRow>
-            <TableHead>Service</TableHead>
-            <TableHead>Monthly Cost</TableHead>
-            <TableHead>Renewal Date</TableHead>
-            <TableHead>Actions</TableHead>
-          </TableRow>
-        </TableHeader>
-        <TableBody>
-          {subscriptions.map((sub) => (
-            <TableRow key={sub.id}>
-              <TableCell>{sub.service_name}</TableCell>
-              <TableCell>{sub.price}﷼</TableCell>
-              <TableCell>
-                {new Date(sub.renewal_date).toLocaleDateString()}
-              </TableCell>
-              <TableCell>
-                <Button onClick={() => openDetailModal(sub)}>Details</Button>
-                <Button
-                  variant='destructive'
-                  onClick={() => confirmDelete(sub.id)}
-                  className='ml-2'
-                >
-                  Cancel
-                </Button>
-              </TableCell>
+      {loading ? (
+        <>
+          <SkeletonTable />
+        </>
+      ) : (
+        <Table className='mt-6 w-full'>
+          <TableHeader>
+            <TableRow>
+              <TableHead>Service</TableHead>
+              <TableHead>Monthly Cost</TableHead>
+              <TableHead>Renewal Date</TableHead>
+              <TableHead>Actions</TableHead>
             </TableRow>
-          ))}
-        </TableBody>
-      </Table>
+          </TableHeader>
+          <TableBody>
+            {subscriptions.map((sub) => (
+              <TableRow key={sub.id}>
+                <TableCell>{sub.service_name}</TableCell>
+                <TableCell>{sub.price}﷼</TableCell>
+                <TableCell>
+                  {new Date(sub.renewal_date).toLocaleDateString()}
+                </TableCell>
+                <TableCell>
+                  <Button onClick={() => openDetailModal(sub)}>Details</Button>
+                  <Button
+                    variant='destructive'
+                    onClick={() => confirmDelete(sub.id)}
+                    className='ml-2'
+                  >
+                    Cancel
+                  </Button>
+                </TableCell>
+              </TableRow>
+            ))}
+          </TableBody>
+        </Table>
+      )}
 
       <Dialog open={detailModalOpen} onOpenChange={setDetailModalOpen}>
         <DialogContent className='p-10'>

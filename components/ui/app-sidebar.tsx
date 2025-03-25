@@ -1,4 +1,4 @@
-import { CalendarClock, ChartPie } from 'lucide-react';
+import { CalendarSync, ChartPie } from 'lucide-react';
 import UserProfile from './user-profile';
 import { SidebarHeader } from '@/components/ui/sidebar';
 import {
@@ -18,6 +18,11 @@ const items = [
     title: 'Dashboard',
     url: '/dashboard',
     icon: ChartPie,
+  },
+  {
+    title: 'Subscriptions',
+    url: '/dashboard/subscriptions',
+    icon: CalendarSync,
   },
 ];
 

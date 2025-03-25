@@ -12,19 +12,11 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
-import React, { useEffect, useState } from 'react';
+import React, { useState } from 'react';
 import { z } from 'zod';
 import { toast } from 'sonner';
 import { LoaderSpinner } from '@/components/ui/loader-spinner';
-import { setTokenClient } from '@/lib/token-client';
-
-interface Errors {
-  username: string;
-  firstName: string;
-  lastName: string;
-  password: string;
-  confirmPassword: string;
-}
+import { registerAndLogin } from '@/lib/auth';
 
 const registerSchema = z
   .object({
@@ -61,121 +53,54 @@ export default function RegisterPage() {
   const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
-  const [errors, setErrors] = useState<Errors>({
-    firstName: '',
-    lastName: '',
-    username: '',
-    password: '',
-    confirmPassword: '',
-  });
+  const [errors, setErrors] = useState<{
+    firstName?: string;
+    lastName?: string;
+    username?: string;
+    password?: string;
+    confirmPassword?: string;
+  }>({});
   const [showPassword, setShowPassword] = useState(false);
   const [showConfirmPassword, setShowConfirmPassword] = useState(false);
   const [loading, setLoading] = useState(false);
   const formattedUsername = username.toLowerCase();
 
-  useEffect(() => {
-    const token = localStorage.getItem('accessToken');
-
-    if (token) {
-      router.push('/dashboard');
-    }
-  }, [router]);
-
-  const handleSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
+  async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
+    setErrors({});
 
-    setErrors({
-      firstName: '',
-      lastName: '',
-      username: '',
-      password: '',
-      confirmPassword: '',
-    });
-
-    const validationResult = registerSchema.safeParse({
+    const validation = registerSchema.safeParse({
       firstName,
       lastName,
-      username: formattedUsername,
+      username,
       password,
       confirmPassword,
     });
 
-    if (!validationResult.success) {
-      const fieldErrors = validationResult.error.flatten().fieldErrors;
+    if (!validation.success) {
+      const fieldErrors: any = {};
 
-      setErrors({
-        firstName: fieldErrors.firstName ? fieldErrors.firstName.join(' ') : '',
-        lastName: fieldErrors.lastName ? fieldErrors.lastName.join(' ') : '',
-        username: fieldErrors.username ? fieldErrors.username.join(' ') : '',
-        password: fieldErrors.password ? fieldErrors.password.join(' ') : '',
-        confirmPassword: fieldErrors.confirmPassword
-          ? fieldErrors.confirmPassword.join(' ')
-          : '',
+      validation.error.errors.forEach((err) => {
+        if (err.path[0]) fieldErrors[err.path[0]] = err.message;
       });
+
+      setErrors(fieldErrors);
 
       return;
     }
 
-    setLoading(true);
-
     try {
-      const res = await fetch('/api/auth/register', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          first_name: firstName,
-          last_name: lastName,
-          username: formattedUsername,
-          password,
-          confirmPassword,
-        }),
-      });
+      setLoading(true);
+      await registerAndLogin(firstName, lastName, formattedUsername, password);
 
-      const data = await res.json();
-
-      if (!data && !data.user) {
-        toast.error(data.error, {
-          position: 'top-center',
-        });
-      }
-
-      await handleLogin();
-    } catch (error: unknown) {
+      router.push('/dashboard');
+    } catch (error: any) {
       console.error(error);
-
-      toast.error('Something went wrong.', {
-        position: 'top-center',
-      });
+      toast.error('Something went wrong.');
     } finally {
       setLoading(false);
     }
-  };
-
-  const handleLogin = async () => {
-    try {
-      const res = await fetch('/api/auth/login', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ username: formattedUsername, password }),
-      });
-
-      const data = await res.json();
-
-      if (data.accessToken) {
-        setTokenClient(data.accessToken, data.refreshToken);
-
-        router.push('/dashboard');
-      } else {
-        toast.error(data.error || 'Login failed.', {
-          position: 'top-center',
-        });
-      }
-    } catch (error: unknown) {
-      console.error(error);
-
-      toast.error('Something went wrong.');
-    }
-  };
+  }
 
   return (
     <div className='grid grid-rows-[20px_1fr_20px] items-center justify-items-center min-h-screen p-8 pb-20 gap-16 sm:p-20 font-[family-name:var(--font-geist-sans)]'>

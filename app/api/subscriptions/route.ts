@@ -159,3 +159,72 @@ export async function PATCH(request: NextRequest) {
     return NextResponse.json({ error: error.message }, { status: 500 });
   }
 }
+
+export async function GET_PRICE_HISTORY(request: NextRequest) {
+  try {
+    const { accessToken, refreshToken } = await getTokenServer();
+    const { searchParams } = new URL(request.url);
+    const id = searchParams.get('id');
+
+    if (!id)
+      return NextResponse.json(
+        { error: 'Subscription ID is required' },
+        { status: 400 }
+      );
+
+    const apiRes = await fetchWithAuth(
+      `${process.env.NEXT_PUBLIC_API_BASE_URL}/subscriptions/${id}/price-history/`,
+      { headers: { Authorization: `Bearer ${accessToken}` } },
+      refreshToken
+    );
+
+    const data = await apiRes.json();
+    if (!apiRes.ok)
+      return NextResponse.json(
+        { error: data.detail || 'Failed to fetch price history' },
+        { status: apiRes.status }
+      );
+
+    return NextResponse.json(data);
+  } catch (error) {
+    return NextResponse.json(
+      {
+        error: error instanceof Error ? error.message : 'Something went wrong',
+      },
+      { status: 500 }
+    );
+  }
+}
+
+export async function IMPORT_CSV(request: NextRequest) {
+  try {
+    const { accessToken, refreshToken } = await getTokenServer();
+    const formData = await request.formData();
+
+    const apiRes = await fetchWithAuth(
+      `${process.env.NEXT_PUBLIC_API_BASE_URL}/subscriptions/import_csv/`,
+      {
+        method: 'POST',
+        headers: { Authorization: `Bearer ${accessToken}` },
+        body: formData,
+      },
+      refreshToken
+    );
+
+    const data = await apiRes.json();
+    if (!apiRes.ok)
+      return NextResponse.json(
+        { error: data.detail || 'Failed to import CSV' },
+        { status: apiRes.status }
+      );
+
+    return NextResponse.json(data);
+  } catch (error) {
+    return NextResponse.json(
+      {
+        error: error instanceof Error ? error.message : 'Something went wrong',
+      },
+      { status: 500 }
+    );
+  }
+}

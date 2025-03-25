@@ -16,66 +16,94 @@ import {
   setTokenClient,
 } from '@/lib/token-client';
 import { useRouter } from 'next/navigation';
+import { currentUser, logout } from '@/lib/auth';
 
 export default function UserProfile() {
   const [user, setUser] = useState<{ username: string } | null>(null);
   const router = useRouter();
 
-  useEffect(() => {
-    async function fetchUser() {
-      const { accessToken, refreshToken } = getTokenClient();
+  // useEffect(() => {
+  //   async function fetchUser() {
+  //     const { accessToken, refreshToken } = getTokenClient();
 
-      if (!accessToken && !refreshToken) {
+  //     if (!accessToken && !refreshToken) {
+  //       router.push('/login');
+  //       return;
+  //     }
+
+  //     let res = await fetch('/api/auth/me', {
+  //       method: 'GET',
+  //       headers: { Authorization: `Bearer ${accessToken}` },
+  //     });
+
+  //     if (res.status === 401 && refreshToken) {
+  //       const refreshResponse = await fetch('/api/auth/refresh', {
+  //         method: 'POST',
+  //         headers: { 'Content-Type': 'application/json' },
+  //         body: JSON.stringify({ refreshToken }),
+  //       });
+
+  //       if (refreshResponse.ok) {
+  //         const { accessToken: newAccessToken } = await refreshResponse.json();
+
+  //         setTokenClient(accessToken as string, refreshToken);
+
+  //         res = await fetch('/api/auth/me', {
+  //           method: 'GET',
+  //           headers: { Authorization: `Bearer ${newAccessToken}` },
+  //         });
+
+  //         if (!res.ok) {
+  //           router.push('/login');
+  //           return;
+  //         }
+  //       } else {
+  //         router.push('/login');
+  //         return;
+  //       }
+  //     }
+
+  //     const userData = await res.json();
+  //     setUser(userData.user);
+  //   }
+
+  //   fetchUser();
+  // }, [router]);
+
+  // async function handleLogout() {
+  //   const res = await fetch('/api/auth/logout');
+
+  //   if (res) {
+  //     deleteTokenClient();
+  //   }
+  //   router.push('/login');
+  // }
+
+  // if (!user) {
+  //   return (
+  //     <div>
+  //       <LoaderSpinner className='mx-auto' />
+  //     </div>
+  //   );
+  // }
+
+  useEffect(() => {
+    const fetchUser = async () => {
+      const { data, error } = await currentUser();
+
+      if (error || !data) {
         router.push('/login');
         return;
       }
 
-      let res = await fetch('/api/auth/me', {
-        method: 'GET',
-        headers: { Authorization: `Bearer ${accessToken}` },
-      });
-
-      if (res.status === 401 && refreshToken) {
-        const refreshResponse = await fetch('/api/auth/refresh', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ refreshToken }),
-        });
-
-        if (refreshResponse.ok) {
-          const { accessToken: newAccessToken } = await refreshResponse.json();
-
-          setTokenClient(accessToken as string, refreshToken);
-
-          res = await fetch('/api/auth/me', {
-            method: 'GET',
-            headers: { Authorization: `Bearer ${newAccessToken}` },
-          });
-
-          if (!res.ok) {
-            router.push('/login');
-            return;
-          }
-        } else {
-          router.push('/login');
-          return;
-        }
-      }
-
-      const userData = await res.json();
-      setUser(userData.user);
-    }
+      setUser(data);
+    };
 
     fetchUser();
   }, [router]);
 
   async function handleLogout() {
-    const res = await fetch('/api/auth/logout');
-
-    if (res) {
-      deleteTokenClient();
-    }
-    router.push('/login');
+    logout();
   }
 
   if (!user) {

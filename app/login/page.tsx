@@ -11,17 +11,12 @@ import {
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { LoaderSpinner } from '@/components/ui/loader-spinner';
-import { getTokenClient, setTokenClient } from '@/lib/token-client';
+import { login } from '@/lib/auth';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
-import { useEffect, useState } from 'react';
+import { useState } from 'react';
 import { toast } from 'sonner';
 import { z } from 'zod';
-
-interface Errors {
-  username: string;
-  password: string;
-}
 
 const loginSchema = z.object({
   username: z.string().nonempty({ message: 'Username is required.' }),
@@ -33,62 +28,42 @@ export default function LoginPage() {
   const [username, setUsername] = useState('djebreds');
   const [password, setPassword] = useState('Password@123');
   const [showPassword, setShowPassword] = useState(false);
-  const [errors, setErrors] = useState<Errors>({ username: '', password: '' });
+  const [errors, setErrors] = useState<{
+    username?: string;
+    password?: string;
+  }>({});
   const [loading, setLoading] = useState(false);
 
-  useEffect(() => {
-    const { accessToken, refreshToken } = getTokenClient();
-
-    if (accessToken && refreshToken) {
-      router.push('/dashboard');
-    }
-  }, [router]);
-
-  const handleSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
+  async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
-    setErrors({ username: '', password: '' });
+    setErrors({});
 
-    const validationResult = loginSchema.safeParse({ username, password });
+    const validation = loginSchema.safeParse({ username, password });
 
-    if (!validationResult.success) {
-      const fieldErrors = validationResult.error.flatten().fieldErrors;
+    if (!validation.success) {
+      const fieldErrors: any = {};
 
-      setErrors({
-        username: fieldErrors.username ? fieldErrors.username.join(' ') : '',
-        password: fieldErrors.password ? fieldErrors.password.join(' ') : '',
+      validation.error.errors.forEach((err) => {
+        if (err.path[0]) fieldErrors[err.path[0]] = err.message;
       });
+
+      setErrors(fieldErrors);
 
       return;
     }
 
-    setLoading(true);
-
     try {
-      const res = await fetch('/api/auth/login', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ username, password }),
-      });
+      setLoading(true);
+      await login(username, password);
 
-      const data = await res.json();
-
-      if (data.accessToken && data.refreshToken) {
-        setTokenClient(data.accessToken, data.refreshToken);
-
-        router.push('/dashboard');
-      } else {
-        toast.error(data.error || 'Login failed.', {
-          position: 'top-center',
-        });
-      }
-    } catch (error: unknown) {
+      router.push('/dashboard');
+    } catch (error: any) {
       console.error(error);
-
       toast.error('Something went wrong.');
     } finally {
       setLoading(false);
     }
-  };
+  }
 
   return (
     <div className='grid grid-rows-[20px_1fr_20px] items-center justify-items-center min-h-screen p-8 pb-20 gap-16 sm:p-20 font-[family-name:var(--font-geist-sans)]'>

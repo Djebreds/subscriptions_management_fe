@@ -72,9 +72,9 @@ export default function SubscriptionDashboard() {
         currentPage++;
       }
 
-      console.log(allSubscriptions);
-
       prepareCostBreakdown(allSubscriptions);
+      generateRenewalAlerts(allSubscriptions);
+      calculateTotalSpend(allSubscriptions);
     } catch (err) {
       console.error(err);
     }
@@ -96,9 +96,6 @@ export default function SubscriptionDashboard() {
       setSubscriptions(data.results || []);
       setNextPage(data.next);
       setPrevPage(data.previous);
-      calculateTotalSpend(data.results || []);
-      generateRenewalAlerts(data.results || []);
-      prepareCostBreakdown(data.results || []);
     } catch (err) {
       console.error(err);
       toast.error("Something went wrong.", { position: "top-center" });
@@ -108,16 +105,42 @@ export default function SubscriptionDashboard() {
   };
 
   const calculateTotalSpend = (data: Subscription[]) => {
+    const today = new Date();
+    const currentMonth = today.getMonth();
+    const currentYear = today.getFullYear();
+    const daysInCurrentMonth = new Date(
+      currentYear,
+      currentMonth + 1,
+      0
+    ).getDate();
+    const currentDay = today.getDate();
+
     const total = data.reduce((sum: number, sub: Subscription) => {
       const price = Number(sub.price);
+      const renewalDate = new Date(sub.renewal_date);
+      const renewalMonth = renewalDate.getMonth();
+      const renewalYear = renewalDate.getFullYear();
+
+      if (
+        renewalMonth < currentMonth ||
+        (renewalMonth === currentMonth && renewalYear < currentYear)
+      ) {
+        return sum;
+      }
+
       if (sub.billing_cycle === "monthly") {
         return sum + price;
       } else if (sub.billing_cycle === "annual") {
-        return sum + price / 12;
+        const dailyRate = price / 365;
+        const daysInMonth =
+          renewalMonth === currentMonth ? currentDay : daysInCurrentMonth;
+        return sum + dailyRate * daysInMonth;
       }
+
       return sum;
     }, 0);
-    setTotalMonthlySpend(Number(total));
+
+    setTotalMonthlySpend(Number(total.toFixed(2)));
   };
 
   const handleThemeToggle = () => {
@@ -127,15 +150,38 @@ export default function SubscriptionDashboard() {
 
   const generateRenewalAlerts = (data: Subscription[]) => {
     const today = new Date();
+    const oneMonthFromNow = new Date();
+    oneMonthFromNow.setMonth(today.getMonth() + 1);
+    const sevenDaysFromNow = new Date();
+    sevenDaysFromNow.setDate(today.getDate() + 7);
+
     const upcomingRenewals = data.filter((sub: Subscription) => {
       const renewalDate = new Date(sub.renewal_date);
-      const daysLeft = Math.ceil(
-        (renewalDate.getTime() - today.getTime()) / (1000 * 60 * 60 * 24)
-      );
-      return daysLeft <= 7;
+      return renewalDate >= today && renewalDate <= oneMonthFromNow;
     });
 
+    // Sort by renewal date
+    upcomingRenewals.sort(
+      (a, b) =>
+        new Date(a.renewal_date).getTime() - new Date(b.renewal_date).getTime()
+    );
+
     setRenewalAlerts(upcomingRenewals);
+  };
+
+  const isRenewalWithinSevenDays = (renewalDate: string) => {
+    const today = new Date();
+    const sevenDaysFromNow = new Date();
+    sevenDaysFromNow.setDate(today.getDate() + 7);
+    const renewal = new Date(renewalDate);
+    return renewal >= today && renewal <= sevenDaysFromNow;
+  };
+
+  const calculateAnnualSavings = (monthlyPrice: number) => {
+    // Assuming 20% discount for annual subscriptions
+    const annualPrice = monthlyPrice * 12 * 0.8;
+    const monthlyPricePerYear = monthlyPrice * 12;
+    return monthlyPricePerYear - annualPrice;
   };
 
   const prepareCostBreakdown = (data: Subscription[]) => {
@@ -167,21 +213,91 @@ export default function SubscriptionDashboard() {
         <Switch checked={darkMode} onCheckedChange={handleThemeToggle} />
       </div>
 
-      <Card>
-        <CardContent>
-          <h2 className="text-xl font-semibold">
-            Total Monthly Spend:{" "}
-            {loading ? (
-              <span className="inline-block w-32 h-6 bg-gray-200 dark:bg-gray-700 animate-pulse rounded" />
-            ) : (
-              `${totalMonthlySpend.toFixed(2)}﷼`
-            )}
-          </h2>
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-6">
+        <Card className="bg-primary/5">
+          <CardContent className="pt-6">
+            <h2 className="text-lg font-medium text-muted-foreground mb-2">
+              Total Monthly Spend
+            </h2>
+            <div className="text-3xl font-bold">
+              {loading ? (
+                <span className="inline-block w-32 h-8 bg-gray-200 dark:bg-gray-700 animate-pulse rounded" />
+              ) : (
+                `${totalMonthlySpend.toFixed(2)}﷼`
+              )}
+            </div>
+          </CardContent>
+        </Card>
+
+        <Card className="bg-yellow-50 dark:bg-yellow-950/20">
+          <CardContent className="pt-6">
+            <h2 className="text-lg font-medium text-muted-foreground mb-2">
+              Upcoming Renewals
+            </h2>
+            <div className="text-3xl font-bold text-yellow-600 dark:text-yellow-400">
+              {loading ? (
+                <span className="inline-block w-32 h-8 bg-yellow-200 dark:bg-yellow-800 animate-pulse rounded" />
+              ) : (
+                renewalAlerts.length
+              )}
+            </div>
+            <p className="text-sm text-muted-foreground mt-1">Next 30 days</p>
+          </CardContent>
+        </Card>
+      </div>
+
+      <Card className="mb-6">
+        <CardContent className="pt-6">
+          <h3 className="text-lg font-semibold mb-4">Renewal Calendar</h3>
+          {loading ? (
+            <div className="space-y-4">
+              <div className="h-12 bg-gray-200 dark:bg-gray-700 rounded animate-pulse" />
+              <div className="h-12 bg-gray-200 dark:bg-gray-700 rounded animate-pulse" />
+              <div className="h-12 bg-gray-200 dark:bg-gray-700 rounded animate-pulse" />
+            </div>
+          ) : renewalAlerts.length > 0 ? (
+            <div className="space-y-4">
+              {renewalAlerts.map((sub) => (
+                <div
+                  key={sub.id}
+                  className={`flex items-center justify-between p-4 rounded-lg ${
+                    isRenewalWithinSevenDays(sub.renewal_date)
+                      ? "bg-red-50 dark:bg-red-950/20 border border-red-200 dark:border-red-800"
+                      : "bg-yellow-50 dark:bg-yellow-950/20"
+                  }`}
+                >
+                  <div>
+                    <h4 className="font-medium">{sub.service_name}</h4>
+                    <p className="text-sm text-muted-foreground">
+                      Renewal: {new Date(sub.renewal_date).toLocaleDateString()}
+                      {isRenewalWithinSevenDays(sub.renewal_date) && (
+                        <span className="ml-2 text-red-600 dark:text-red-400 font-medium">
+                          (Renewing soon!)
+                        </span>
+                      )}
+                    </p>
+                  </div>
+                  <div className="text-right">
+                    <p className="font-medium">{sub.price}﷼</p>
+                    <p className="text-sm text-muted-foreground capitalize">
+                      {sub.billing_cycle}
+                    </p>
+                  </div>
+                </div>
+              ))}
+            </div>
+          ) : (
+            <p className="text-muted-foreground">
+              No upcoming renewals in the next 30 days
+            </p>
+          )}
         </CardContent>
       </Card>
 
       <div className="mt-6">
-        <h3 className="text-lg font-semibold">Cost Breakdown by Service</h3>
+        <h3 className="text-lg font-semibold mb-4">
+          Cost Breakdown by Service
+        </h3>
         {loading ? (
           <div className="w-full h-[300px] bg-gray-200 dark:bg-gray-700 animate-pulse rounded" />
         ) : (
@@ -197,7 +313,7 @@ export default function SubscriptionDashboard() {
                 fill={darkMode ? "#FFF" : "#000"}
               />
               <YAxis
-                tickFormatter={(value) => `${value}﷼`}
+                tickFormatter={(value: number) => `${value}﷼`}
                 tick={{ fontSize: 12 }}
               />
               <Tooltip
@@ -223,54 +339,55 @@ export default function SubscriptionDashboard() {
         )}
       </div>
 
-      {loading ? (
-        <div className="mt-6 p-4 bg-yellow-100 text-yellow-800 rounded">
-          <h3 className="text-lg font-semibold">
-            Upcoming Renewals (Next 7 Days)
+      <Card className="mt-6">
+        <CardContent className="pt-6">
+          <h3 className="text-lg font-semibold mb-4">
+            Annual Savings Comparison
           </h3>
-          <div className="space-y-2">
-            <div className="h-4 bg-yellow-200 rounded animate-pulse" />
-            <div className="h-4 bg-yellow-200 rounded animate-pulse w-3/4" />
-            <div className="h-4 bg-yellow-200 rounded animate-pulse w-1/2" />
-          </div>
-        </div>
-      ) : (
-        renewalAlerts.length > 0 && (
-          <div className="mt-6 p-4 bg-yellow-100 text-yellow-800 rounded">
-            <h3 className="text-lg font-semibold">
-              Upcoming Renewals (Next 7 Days)
-            </h3>
-            <ul>
-              {renewalAlerts.map((sub) => (
-                <li key={sub.id}>
-                  {sub.service_name} - Renewal on{" "}
-                  {new Date(sub.renewal_date).toLocaleDateString()}
-                </li>
-              ))}
-            </ul>
-          </div>
-        )
-      )}
-
-      <div className="mt-6 p-4 bg-blue-100 text-blue-800 rounded">
-        <h3 className="text-lg font-semibold">Savings Comparison</h3>
-        {loading ? (
-          <div className="space-y-2">
-            <div className="h-4 bg-blue-200 rounded animate-pulse" />
-            <div className="h-4 bg-blue-200 rounded animate-pulse w-5/6" />
-            <div className="h-4 bg-blue-200 rounded animate-pulse w-4/6" />
-          </div>
-        ) : (
-          subscriptions.map((sub) =>
-            sub.billing_cycle === "monthly" ? (
-              <p key={sub.id}>
-                {sub.service_name}: If you switch to annual, you&apos;ll save{" "}
-                {(sub.price * 12 * 0.8).toFixed(2)}﷼ per year.
-              </p>
-            ) : null
-          )
-        )}
-      </div>
+          {loading ? (
+            <div className="space-y-4">
+              <div className="h-12 bg-gray-200 dark:bg-gray-700 rounded animate-pulse" />
+              <div className="h-12 bg-gray-200 dark:bg-gray-700 rounded animate-pulse" />
+              <div className="h-12 bg-gray-200 dark:bg-gray-700 rounded animate-pulse" />
+            </div>
+          ) : (
+            <div className="space-y-4">
+              {subscriptions
+                .filter((sub) => sub.billing_cycle === "monthly")
+                .map((sub) => {
+                  const savings = calculateAnnualSavings(sub.price);
+                  return (
+                    <div
+                      key={sub.id}
+                      className="flex items-center justify-between p-4 bg-blue-50 dark:bg-blue-950/20 rounded-lg"
+                    >
+                      <div>
+                        <h4 className="font-medium">{sub.service_name}</h4>
+                        <p className="text-sm text-muted-foreground">
+                          Current: {sub.price}﷼/month
+                        </p>
+                      </div>
+                      <div className="text-right">
+                        <p className="font-medium text-green-600 dark:text-green-400">
+                          Save {savings.toFixed(2)}﷼/year
+                        </p>
+                        <p className="text-sm text-muted-foreground">
+                          Switch to annual
+                        </p>
+                      </div>
+                    </div>
+                  );
+                })}
+              {subscriptions.filter((sub) => sub.billing_cycle === "monthly")
+                .length === 0 && (
+                <p className="text-muted-foreground">
+                  No monthly subscriptions found
+                </p>
+              )}
+            </div>
+          )}
+        </CardContent>
+      </Card>
     </div>
   );
 }

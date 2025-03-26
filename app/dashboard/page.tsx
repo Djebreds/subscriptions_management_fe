@@ -47,7 +47,38 @@ export default function SubscriptionDashboard() {
 
   useEffect(() => {
     loadSubscriptions();
+    loadAllSubscriptionsForBreakdown();
   }, [page, filters]);
+
+  const loadAllSubscriptionsForBreakdown = async () => {
+    try {
+      let allSubscriptions: Subscription[] = [];
+      let currentPage = 1;
+      let hasNextPage = true;
+
+      while (hasNextPage) {
+        const { data, error } = await getSubscriptions({
+          ...filters,
+          page: currentPage.toString(),
+        });
+
+        if (error) {
+          console.error(error);
+          break;
+        }
+
+        allSubscriptions = [...allSubscriptions, ...(data.results || [])];
+        hasNextPage = !!data.next;
+        currentPage++;
+      }
+
+      console.log(allSubscriptions);
+
+      prepareCostBreakdown(allSubscriptions);
+    } catch (err) {
+      console.error(err);
+    }
+  };
 
   const loadSubscriptions = async () => {
     try {
@@ -134,48 +165,105 @@ export default function SubscriptionDashboard() {
       <Card>
         <CardContent>
           <h2 className="text-xl font-semibold">
-            Total Monthly Spend: {totalMonthlySpend}﷼
+            Total Monthly Spend:{" "}
+            {loading ? (
+              <span className="inline-block w-32 h-6 bg-gray-200 dark:bg-gray-700 animate-pulse rounded" />
+            ) : (
+              `${totalMonthlySpend}﷼`
+            )}
           </h2>
         </CardContent>
       </Card>
 
       <div className="mt-6">
         <h3 className="text-lg font-semibold">Cost Breakdown by Service</h3>
-        <ResponsiveContainer width="100%" height={300}>
-          <BarChart data={costBreakdown}>
-            <XAxis dataKey="service_name" />
-            <YAxis />
-            <Tooltip wrapperClassName="rounded-md" />
-            <Bar dataKey="price" fill={darkMode ? "#FFF" : "#000"} />
-          </BarChart>
-        </ResponsiveContainer>
+        {loading ? (
+          <div className="w-full h-[300px] bg-gray-200 dark:bg-gray-700 animate-pulse rounded" />
+        ) : (
+          <ResponsiveContainer width="100%" height={400}>
+            <BarChart data={costBreakdown}>
+              <XAxis
+                dataKey="service_name"
+                angle={-45}
+                textAnchor="end"
+                height={100}
+                interval={0}
+                tick={{ fontSize: 12 }}
+                fill={darkMode ? "#FFF" : "#000"}
+              />
+              <YAxis
+                tickFormatter={(value) => `${value}﷼`}
+                tick={{ fontSize: 12 }}
+              />
+              <Tooltip
+                formatter={(value: number) => [`${value}﷼`, "Price"]}
+                wrapperClassName="rounded-md"
+                contentStyle={{
+                  backgroundColor: darkMode ? "#1f2937" : "#ffffff",
+                  border: "none",
+                  borderRadius: "0.375rem",
+                  color: darkMode ? "#ffffff" : "#000000",
+                }}
+                labelStyle={{
+                  color: darkMode ? "#ffffff" : "#000000",
+                }}
+              />
+              <Bar
+                dataKey="price"
+                fill={darkMode ? "#FFF" : "#000"}
+                radius={[4, 4, 0, 0]}
+              />
+            </BarChart>
+          </ResponsiveContainer>
+        )}
       </div>
 
-      {renewalAlerts.length > 0 && (
+      {loading ? (
         <div className="mt-6 p-4 bg-yellow-100 text-yellow-800 rounded">
           <h3 className="text-lg font-semibold">
             Upcoming Renewals (Next 7 Days)
           </h3>
-          <ul>
-            {renewalAlerts.map((sub) => (
-              <li key={sub.id}>
-                {sub.service_name} - Renewal on{" "}
-                {new Date(sub.renewal_date).toLocaleDateString()}
-              </li>
-            ))}
-          </ul>
+          <div className="space-y-2">
+            <div className="h-4 bg-yellow-200 rounded animate-pulse" />
+            <div className="h-4 bg-yellow-200 rounded animate-pulse w-3/4" />
+            <div className="h-4 bg-yellow-200 rounded animate-pulse w-1/2" />
+          </div>
         </div>
+      ) : (
+        renewalAlerts.length > 0 && (
+          <div className="mt-6 p-4 bg-yellow-100 text-yellow-800 rounded">
+            <h3 className="text-lg font-semibold">
+              Upcoming Renewals (Next 7 Days)
+            </h3>
+            <ul>
+              {renewalAlerts.map((sub) => (
+                <li key={sub.id}>
+                  {sub.service_name} - Renewal on{" "}
+                  {new Date(sub.renewal_date).toLocaleDateString()}
+                </li>
+              ))}
+            </ul>
+          </div>
+        )
       )}
 
       <div className="mt-6 p-4 bg-blue-100 text-blue-800 rounded">
         <h3 className="text-lg font-semibold">Savings Comparison</h3>
-        {subscriptions.map((sub) =>
-          sub.billing_cycle === "monthly" ? (
-            <p key={sub.id}>
-              {sub.service_name}: If you switch to annual, you'll save{" "}
-              {(sub.price * 12 * 0.8).toFixed(2)}﷼ per year.
-            </p>
-          ) : null
+        {loading ? (
+          <div className="space-y-2">
+            <div className="h-4 bg-blue-200 rounded animate-pulse" />
+            <div className="h-4 bg-blue-200 rounded animate-pulse w-5/6" />
+            <div className="h-4 bg-blue-200 rounded animate-pulse w-4/6" />
+          </div>
+        ) : (
+          subscriptions.map((sub) =>
+            sub.billing_cycle === "monthly" ? (
+              <p key={sub.id}>
+                {sub.service_name}: If you switch to annual, you&apos;ll save{" "}
+                {(sub.price * 12 * 0.8).toFixed(2)}﷼ per year.
+              </p>
+            ) : null
+          )
         )}
       </div>
     </div>

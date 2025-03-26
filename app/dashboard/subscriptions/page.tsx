@@ -22,6 +22,7 @@ import {
 import {
   createSubscription,
   deleteSubscription,
+  getPriceHistories,
   getSubscriptions,
   importSubscriptions,
   updateSubscription,
@@ -42,6 +43,13 @@ interface Subscription {
   price: number;
   billing_cycle: string;
   renewal_date: string;
+}
+
+interface PriceHistory {
+  id: string;
+  old_price: string;
+  new_price: string;
+  changed_at: Date;
 }
 
 const subscriptionSchema = z.object({
@@ -88,6 +96,7 @@ export default function Subscription() {
   const [updatePrice, setUpdatePrice] = useState("");
   const [updateBillingCycle, setUpdateBillingCycle] = useState("");
   const [csvImportModalOpen, setCsvImportModalOpen] = useState(false);
+  const [priceHistories, setPriceHistories] = useState<PriceHistory[]>([]);
 
   useEffect(() => {
     loadSubscriptions();
@@ -120,6 +129,27 @@ export default function Subscription() {
   const confirmDelete = (id: string) => {
     setSelectedId(id);
     setConfirmDeleteOpen(true);
+  };
+
+  const loadPriceHistories = async () => {
+    if (!selectedSubscription) return;
+    setLoading(true);
+
+    try {
+      const { data, error } = await getPriceHistories(selectedSubscription.id);
+
+      if (error) {
+        toast.error(error, { position: "top-center" });
+        return;
+      }
+
+      setPriceHistories(data);
+    } catch (error) {
+      console.error(error);
+      toast.error("Something went wrong", { position: "top-center" });
+    } finally {
+      setLoading(false);
+    }
   };
 
   const openUpdateModal = (subscription: Subscription) => {
@@ -289,6 +319,7 @@ export default function Subscription() {
 
   const openDetailModal = (subscription: Subscription) => {
     setSelectedSubscription(subscription);
+    loadPriceHistories();
     setDetailModalOpen(true);
   };
 
@@ -455,24 +486,76 @@ export default function Subscription() {
             <DialogTitle>Subscription Details</DialogTitle>
           </DialogHeader>
           {selectedSubscription && (
-            <div>
-              <p>
-                <strong>Service Name:</strong>{" "}
-                {selectedSubscription.service_name}
-              </p>
-              <p>
-                <strong>Price:</strong> {selectedSubscription.price}﷼
-              </p>
-              <p>
-                <strong>Billing Cycle:</strong>{" "}
-                {selectedSubscription.billing_cycle}
-              </p>
-              <p>
-                <strong>Renewal Date:</strong>{" "}
-                {new Date(
-                  selectedSubscription.renewal_date
-                ).toLocaleDateString()}
-              </p>
+            <div className="space-y-6">
+              <div>
+                <p>
+                  <strong>Service Name:</strong>{" "}
+                  {selectedSubscription.service_name}
+                </p>
+                <p>
+                  <strong>Price:</strong> {selectedSubscription.price}﷼
+                </p>
+                <p>
+                  <strong>Billing Cycle:</strong>{" "}
+                  {selectedSubscription.billing_cycle}
+                </p>
+                <p>
+                  <strong>Renewal Date:</strong>{" "}
+                  {new Date(
+                    selectedSubscription.renewal_date
+                  ).toLocaleDateString()}
+                </p>
+              </div>
+
+              <div>
+                <h3 className="text-lg font-semibold mb-4">Price History</h3>
+                {loading ? (
+                  <div className="space-y-2">
+                    <div className="h-4 bg-gray-200 dark:bg-gray-700 rounded animate-pulse" />
+                    <div className="h-4 bg-gray-200 dark:bg-gray-700 rounded animate-pulse w-5/6" />
+                    <div className="h-4 bg-gray-200 dark:bg-gray-700 rounded animate-pulse w-4/6" />
+                  </div>
+                ) : priceHistories.length > 0 ? (
+                  <div className="overflow-x-auto">
+                    <table className="min-w-full divide-y divide-gray-200 dark:divide-gray-700">
+                      <thead>
+                        <tr>
+                          <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">
+                            Old Price
+                          </th>
+                          <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">
+                            New Price
+                          </th>
+                          <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">
+                            Changed At
+                          </th>
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-gray-200 dark:divide-gray-700">
+                        {priceHistories.map((history) => (
+                          <tr key={history.id}>
+                            <td className="px-6 py-4 whitespace-nowrap text-sm">
+                              {history.old_price}﷼
+                            </td>
+                            <td className="px-6 py-4 whitespace-nowrap text-sm">
+                              {history.new_price}﷼
+                            </td>
+                            <td className="px-6 py-4 whitespace-nowrap text-sm">
+                              {new Date(
+                                history.changed_at
+                              ).toLocaleDateString()}
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                ) : (
+                  <p className="text-gray-500 dark:text-gray-400">
+                    No price history available
+                  </p>
+                )}
+              </div>
             </div>
           )}
         </DialogContent>

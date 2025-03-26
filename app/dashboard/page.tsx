@@ -63,7 +63,7 @@ export default function SubscriptionDashboard() {
         });
 
         if (error) {
-          console.error(error);
+          console.log(error);
           break;
         }
 
@@ -108,11 +108,16 @@ export default function SubscriptionDashboard() {
   };
 
   const calculateTotalSpend = (data: Subscription[]) => {
-    const total = data.reduce(
-      (sum: number, sub: Subscription) => sum + sub.price,
-      0
-    );
-    setTotalMonthlySpend(total);
+    const total = data.reduce((sum: number, sub: Subscription) => {
+      const price = Number(sub.price);
+      if (sub.billing_cycle === "monthly") {
+        return sum + price;
+      } else if (sub.billing_cycle === "annual") {
+        return sum + price / 12;
+      }
+      return sum;
+    }, 0);
+    setTotalMonthlySpend(Number(total));
   };
 
   const handleThemeToggle = () => {
@@ -169,7 +174,7 @@ export default function SubscriptionDashboard() {
             {loading ? (
               <span className="inline-block w-32 h-6 bg-gray-200 dark:bg-gray-700 animate-pulse rounded" />
             ) : (
-              `${totalMonthlySpend}﷼`
+              `${totalMonthlySpend.toFixed(2)}﷼`
             )}
           </h2>
         </CardContent>

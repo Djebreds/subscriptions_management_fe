@@ -27,6 +27,8 @@ interface Subscription {
   price: number;
   billing_cycle: string;
   renewal_date: string;
+  start_date?: string;
+  active?: boolean;
 }
 
 interface SubscriptionTableProps {
@@ -38,7 +40,7 @@ interface SubscriptionTableProps {
   setPage: (page: number | ((prev: number) => number)) => void;
   openDetailModal: (subscription: Subscription) => void;
   openUpdateModal: (subscription: Subscription) => void;
-  confirmDelete: (id: string) => void;
+  confirmDelete: (id: string, currentStatus: boolean) => void;
   filters: Record<string, string>;
   setFilters: (filters: Record<string, string>) => void;
 }
@@ -116,6 +118,19 @@ export default function SubscriptionTable({
             <SelectItem value="annual">Annual</SelectItem>
           </SelectContent>
         </Select>
+        <Select
+          value={localFilters.active ?? "all"}
+          onValueChange={(value) => handleSelectChange("active", value)}
+        >
+          <SelectTrigger className="w-full">
+            <SelectValue placeholder="Status" />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="all">All</SelectItem>
+            <SelectItem value="1">Active</SelectItem>
+            <SelectItem value="0">Inactive</SelectItem>
+          </SelectContent>
+        </Select>
         <Input
           name="min_price"
           type="number"
@@ -157,6 +172,7 @@ export default function SubscriptionTable({
                 <TableHead>Monthly Cost</TableHead>
                 <TableHead>Billing Cycle</TableHead>
                 <TableHead>Renewal Date</TableHead>
+                <TableHead>Status</TableHead>
                 <TableHead>Actions</TableHead>
               </TableRow>
             </TableHeader>
@@ -168,6 +184,13 @@ export default function SubscriptionTable({
                   <TableCell>{sub.billing_cycle}</TableCell>
                   <TableCell>
                     {new Date(sub.renewal_date).toLocaleDateString()}
+                  </TableCell>
+                  <TableCell>
+                    <span
+                      className={sub.active ? "text-green-500" : "text-red-500"}
+                    >
+                      {sub.active ? "Active" : "Inactive"}
+                    </span>
                   </TableCell>
                   <TableCell>
                     <Button
@@ -184,10 +207,10 @@ export default function SubscriptionTable({
                     </Button>
                     <Button
                       variant="destructive"
-                      onClick={() => confirmDelete(sub.id)}
+                      onClick={() => confirmDelete(sub.id, sub.active ?? false)}
                       className="ml-2"
                     >
-                      Cancel
+                      Toggle Status
                     </Button>
                   </TableCell>
                 </TableRow>

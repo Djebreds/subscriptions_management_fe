@@ -21,7 +21,6 @@ import {
 } from "@/components/ui/select";
 import {
   createSubscription,
-  deleteSubscription,
   getPriceHistories,
   getSubscriptions,
   importSubscriptions,
@@ -35,6 +34,8 @@ interface Errors {
   serviceName: string;
   price: string;
   billingCyle: string;
+  startDate: string;
+  active: string;
 }
 
 interface Subscription {
@@ -43,6 +44,8 @@ interface Subscription {
   price: number;
   billing_cycle: string;
   renewal_date: string;
+  start_date?: string;
+  active?: boolean;
 }
 
 interface PriceHistory {
@@ -60,6 +63,10 @@ const subscriptionSchema = z.object({
   billingCycle: z.enum(["monthly", "annual"], {
     errorMap: () => ({ message: "Billing cycle is required" }),
   }),
+  startDate: z.string().nonempty({ message: "Start date is required." }),
+  active: z.enum(["true", "false"], {
+    errorMap: () => ({ message: "Status is required" }),
+  }),
 });
 
 export default function Subscription() {
@@ -68,10 +75,14 @@ export default function Subscription() {
   const [serviceName, setServiceName] = useState("");
   const [price, setPrice] = useState("");
   const [billingCycle, setBillingCycle] = useState("");
+  const [startDate, setStartDate] = useState("");
+  const [active, setActive] = useState("true");
   const [errors, setErrors] = useState<Errors>({
     serviceName: "",
     price: "",
     billingCyle: "",
+    startDate: "",
+    active: "",
   });
   const [filters, setFilters] = useState({
     service_name: "",
@@ -86,6 +97,9 @@ export default function Subscription() {
   const [modalOpen, setModalOpen] = useState(false);
   const [confirmDeleteOpen, setConfirmDeleteOpen] = useState(false);
   const [selectedId, setSelectedId] = useState<string | null>(null);
+  const [selectedSubscriptionStatus, setSelectedSubscriptionStatus] = useState<
+    boolean | null
+  >(null);
   const [detailModalOpen, setDetailModalOpen] = useState(false);
   const [selectedSubscription, setSelectedSubscription] =
     useState<Subscription | null>(null);
@@ -95,6 +109,8 @@ export default function Subscription() {
   const [updateServiceName, setUpdateServiceName] = useState("");
   const [updatePrice, setUpdatePrice] = useState("");
   const [updateBillingCycle, setUpdateBillingCycle] = useState("");
+  const [updateStartDate, setUpdateStartDate] = useState("");
+  const [updateActive, setUpdateActive] = useState("true");
   const [csvImportModalOpen, setCsvImportModalOpen] = useState(false);
   const [priceHistories, setPriceHistories] = useState<PriceHistory[]>([]);
 
@@ -126,8 +142,9 @@ export default function Subscription() {
     }
   };
 
-  const confirmDelete = (id: string) => {
+  const toggleActiveStatus = (id: string, currentStatus: boolean) => {
     setSelectedId(id);
+    setSelectedSubscriptionStatus(currentStatus);
     setConfirmDeleteOpen(true);
   };
 
@@ -157,6 +174,8 @@ export default function Subscription() {
     setUpdateServiceName(subscription.service_name);
     setUpdatePrice(subscription.price.toString());
     setUpdateBillingCycle(subscription.billing_cycle);
+    setUpdateStartDate(subscription.start_date || "");
+    setUpdateActive(subscription.active ? "true" : "false");
     setUpdateModalOpen(true);
   };
 
@@ -164,12 +183,20 @@ export default function Subscription() {
     e: React.FormEvent<HTMLFormElement>
   ) => {
     e.preventDefault();
-    setErrors({ serviceName: "", price: "", billingCyle: "" });
+    setErrors({
+      serviceName: "",
+      price: "",
+      billingCyle: "",
+      startDate: "",
+      active: "",
+    });
 
     const validationResult = subscriptionSchema.safeParse({
       serviceName,
       price,
       billingCycle,
+      startDate,
+      active,
     });
 
     if (!validationResult.success) {
@@ -178,6 +205,8 @@ export default function Subscription() {
         serviceName: fieldErrors.serviceName?.join(" ") || "",
         price: fieldErrors.price?.join(" ") || "",
         billingCyle: fieldErrors.billingCycle?.join(" ") || "",
+        startDate: "",
+        active: "",
       });
       return;
     }
@@ -189,6 +218,8 @@ export default function Subscription() {
         service_name: serviceName,
         price: parseFloat(price),
         billing_cycle: billingCycle,
+        start_date: startDate,
+        active: active === "true",
       });
 
       if (error) {
@@ -200,6 +231,8 @@ export default function Subscription() {
       setServiceName("");
       setPrice("");
       setBillingCycle("");
+      setStartDate("");
+      setActive("true");
       setModalOpen(false);
       toast.success("New subscription added.", { position: "top-center" });
     } catch (error: unknown) {
@@ -216,12 +249,20 @@ export default function Subscription() {
     e.preventDefault();
     if (!selectedSubscription) return;
 
-    setErrors({ serviceName: "", price: "", billingCyle: "" });
+    setErrors({
+      serviceName: "",
+      price: "",
+      billingCyle: "",
+      startDate: "",
+      active: "",
+    });
 
     const validationResult = subscriptionSchema.safeParse({
       serviceName: updateServiceName,
       price: updatePrice,
       billingCycle: updateBillingCycle,
+      startDate: updateStartDate,
+      active: updateActive,
     });
 
     if (!validationResult.success) {
@@ -230,6 +271,8 @@ export default function Subscription() {
         serviceName: fieldErrors.serviceName?.join(" ") || "",
         price: fieldErrors.price?.join(" ") || "",
         billingCyle: fieldErrors.billingCycle?.join(" ") || "",
+        startDate: "",
+        active: "",
       });
       return;
     }
@@ -243,6 +286,8 @@ export default function Subscription() {
           service_name: updateServiceName,
           price: parseFloat(updatePrice),
           billing_cycle: updateBillingCycle,
+          start_date: updateStartDate,
+          active: updateActive === "true",
         }
       );
 
@@ -267,25 +312,35 @@ export default function Subscription() {
     }
   };
 
-  const handleDeleteSubscription = async () => {
-    if (!selectedId) return;
+  const handleToggleStatus = async () => {
+    if (!selectedId || selectedSubscriptionStatus === null) return;
 
     try {
       setLoading(true);
-      const { error } = await deleteSubscription(selectedId);
+
+      const newStatus = !selectedSubscriptionStatus;
+
+      const { error } = await updateSubscription(selectedId, {
+        active: newStatus,
+      });
 
       if (error) {
         toast.error(error, { position: "top-center" });
         return;
       }
 
-      const updated = subscriptions.filter((sub) => sub.id !== selectedId);
+      const updated = subscriptions.map((sub) =>
+        sub.id === selectedId ? { ...sub, active: newStatus } : sub
+      );
+
       setSubscriptions(updated);
       setConfirmDeleteOpen(false);
-      toast.success("Subscription has been deleted.", {
-        position: "top-center",
-      });
-      loadSubscriptions();
+      toast.success(
+        `Subscription ${newStatus ? "activated" : "deactivated"} successfully.`,
+        {
+          position: "top-center",
+        }
+      );
     } catch (err) {
       console.error(err);
       toast.error("Something went wrong.", { position: "top-center" });
@@ -373,6 +428,36 @@ export default function Subscription() {
                 )}
               </div>
 
+              <div className="mb-3">
+                <Input
+                  placeholder="Start Date"
+                  type="date"
+                  value={startDate}
+                  onChange={(e) => setStartDate(e.target.value)}
+                />
+                {errors.startDate && (
+                  <p className="text-red-500 text-sm">{errors.startDate}</p>
+                )}
+              </div>
+
+              <div className="mb-3">
+                <Select
+                  onValueChange={(value) => setActive(value)}
+                  defaultValue="true"
+                >
+                  <SelectTrigger className="w-full">
+                    <SelectValue placeholder="Status" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="true">Active</SelectItem>
+                    <SelectItem value="false">Inactive</SelectItem>
+                  </SelectContent>
+                </Select>
+                {errors.active && (
+                  <p className="text-red-500 text-sm">{errors.active}</p>
+                )}
+              </div>
+
               <Button type="submit" className="mt-2 w-full" disabled={loading}>
                 {loading ? (
                   <>
@@ -421,9 +506,11 @@ export default function Subscription() {
         setPage={setPage}
         openDetailModal={openDetailModal}
         openUpdateModal={openUpdateModal}
-        confirmDelete={confirmDelete}
+        confirmDelete={toggleActiveStatus}
         filters={filters}
-        setFilters={setFilters}
+        setFilters={(newFilters: Record<string, string>) =>
+          setFilters((prev) => ({ ...prev, ...newFilters }))
+        }
       />
 
       <Dialog open={updateModalOpen} onOpenChange={setUpdateModalOpen}>
@@ -473,6 +560,36 @@ export default function Subscription() {
               )}
             </div>
 
+            <div className="mb-3">
+              <Input
+                placeholder="Start Date"
+                type="date"
+                value={updateStartDate}
+                onChange={(e) => setUpdateStartDate(e.target.value)}
+              />
+              {errors.startDate && (
+                <p className="text-red-500 text-sm">{errors.startDate}</p>
+              )}
+            </div>
+
+            <div className="mb-3">
+              <Select
+                onValueChange={(value) => setUpdateActive(value)}
+                defaultValue={updateActive}
+              >
+                <SelectTrigger className="w-full">
+                  <SelectValue placeholder="Status" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="true">Active</SelectItem>
+                  <SelectItem value="false">Inactive</SelectItem>
+                </SelectContent>
+              </Select>
+              {errors.active && (
+                <p className="text-red-500 text-sm">{errors.active}</p>
+              )}
+            </div>
+
             <Button type="submit" className="mt-2 w-full" disabled={loading}>
               {loading ? <LoaderSpinner className="text-center" /> : "Update"}
             </Button>
@@ -504,6 +621,26 @@ export default function Subscription() {
                   {new Date(
                     selectedSubscription.renewal_date
                   ).toLocaleDateString()}
+                </p>
+                <p>
+                  <strong>Start Date:</strong>{" "}
+                  {selectedSubscription.start_date
+                    ? new Date(
+                        selectedSubscription.start_date
+                      ).toLocaleDateString()
+                    : "Not specified"}
+                </p>
+                <p>
+                  <strong>Status:</strong>{" "}
+                  <span
+                    className={
+                      selectedSubscription.active
+                        ? "text-green-500"
+                        : "text-red-500"
+                    }
+                  >
+                    {selectedSubscription.active ? "Active" : "Inactive"}
+                  </span>
                 </p>
               </div>
 
@@ -564,14 +701,18 @@ export default function Subscription() {
       <Dialog open={confirmDeleteOpen} onOpenChange={setConfirmDeleteOpen}>
         <DialogContent>
           <DialogHeader>
-            <DialogTitle>Confirm Deletion</DialogTitle>
+            <DialogTitle>Confirm Status Change</DialogTitle>
           </DialogHeader>
-          <p>Are you sure you want to cancel this subscription?</p>
+          <p>
+            Are you sure you want to{" "}
+            {selectedSubscriptionStatus ? "deactivate" : "activate"} this
+            subscription?
+          </p>
           <DialogFooter>
             <Button
-              variant="destructive"
+              variant={selectedSubscriptionStatus ? "destructive" : "default"}
               type="submit"
-              onClick={handleDeleteSubscription}
+              onClick={handleToggleStatus}
               disabled={loading}
             >
               {loading ? (

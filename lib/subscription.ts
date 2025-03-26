@@ -10,6 +10,7 @@ export async function getSubscriptions(params: Record<string, string>) {
       max_renewal_date: params.max_renewal_date || "",
       min_renewal_date: params.min_renewal_date || "",
       service_name: params.service_name || "",
+      active: params.active || "",
     });
 
     const { data } = await api.get(`/subscriptions/?${queryParams.toString()}`);

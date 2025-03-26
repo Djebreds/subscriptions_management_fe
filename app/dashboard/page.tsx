@@ -1,10 +1,10 @@
-'use client';
+"use client";
 
-import { useState, useEffect } from 'react';
-import { Card, CardContent } from '@/components/ui/card';
-import { Switch } from '@/components/ui/switch';
-import { useTheme } from 'next-themes';
-import { toast } from 'sonner';
+import { useState, useEffect } from "react";
+import { Card, CardContent } from "@/components/ui/card";
+import { Switch } from "@/components/ui/switch";
+import { useTheme } from "next-themes";
+import { toast } from "sonner";
 import {
   Bar,
   BarChart,
@@ -12,29 +12,38 @@ import {
   Tooltip,
   XAxis,
   YAxis,
-} from 'recharts';
-import { getSubscriptions } from '@/lib/subscription';
+} from "recharts";
+import { getSubscriptions } from "@/lib/subscription";
+
+interface Subscription {
+  id: string;
+  service_name: string;
+  price: number;
+  billing_cycle: string;
+  renewal_date: string;
+}
 
 export default function SubscriptionDashboard() {
-  const [subscriptions, setSubscriptions] = useState([]);
+  const [subscriptions, setSubscriptions] = useState<Subscription[]>([]);
   const [totalMonthlySpend, setTotalMonthlySpend] = useState(0);
   const [darkMode, setDarkMode] = useState(false);
   const { setTheme } = useTheme();
   const [filters, setFilters] = useState({
-    service_name: '',
-    billing_cycle: '',
-    min_price: '',
-    max_price: '',
-    min_renewal_date: '',
-    max_renewal_date: '',
+    service_name: "",
+    billing_cycle: "",
+    min_price: "",
+    max_price: "",
+    min_renewal_date: "",
+    max_renewal_date: "",
   });
   const [page, setPage] = useState(1);
-  const [totalPages, setTotalPages] = useState(1);
   const [loading, setLoading] = useState(false);
-  const [nextPage, setNextPage] = useState(null);
-  const [prevPage, setPrevPage] = useState(null);
-  const [renewalAlerts, setRenewalAlerts] = useState([]);
-  const [costBreakdown, setCostBreakdown] = useState([]);
+  const [nextPage, setNextPage] = useState<string | null>(null);
+  const [prevPage, setPrevPage] = useState<string | null>(null);
+  const [renewalAlerts, setRenewalAlerts] = useState<Subscription[]>([]);
+  const [costBreakdown, setCostBreakdown] = useState<
+    { service_name: string; price: number }[]
+  >([]);
 
   useEffect(() => {
     loadSubscriptions();
@@ -49,7 +58,7 @@ export default function SubscriptionDashboard() {
       });
 
       if (error) {
-        toast.error(error, { position: 'top-center' });
+        toast.error(error, { position: "top-center" });
         return;
       }
 
@@ -61,89 +70,96 @@ export default function SubscriptionDashboard() {
       prepareCostBreakdown(data.results || []);
     } catch (err) {
       console.error(err);
-      toast.error('Something went wrong.', { position: 'top-center' });
+      toast.error("Something went wrong.", { position: "top-center" });
     } finally {
       setLoading(false);
     }
   };
 
-  const calculateTotalSpend = (data) => {
-    const total = data.reduce((sum, sub) => sum + parseFloat(sub.price), 0);
+  const calculateTotalSpend = (data: Subscription[]) => {
+    const total = data.reduce(
+      (sum: number, sub: Subscription) => sum + sub.price,
+      0
+    );
     setTotalMonthlySpend(total);
   };
 
   const handleThemeToggle = () => {
     setDarkMode(!darkMode);
-    setTheme(darkMode ? 'light' : 'dark');
+    setTheme(darkMode ? "light" : "dark");
   };
 
-  const generateRenewalAlerts = (data) => {
+  const generateRenewalAlerts = (data: Subscription[]) => {
     const today = new Date();
-    const upcomingRenewals = data.filter((sub) => {
+    const upcomingRenewals = data.filter((sub: Subscription) => {
       const renewalDate = new Date(sub.renewal_date);
-      const daysLeft = Math.ceil((renewalDate - today) / (1000 * 60 * 60 * 24));
+      const daysLeft = Math.ceil(
+        (renewalDate.getTime() - today.getTime()) / (1000 * 60 * 60 * 24)
+      );
       return daysLeft <= 7;
     });
 
     setRenewalAlerts(upcomingRenewals);
   };
 
-  const prepareCostBreakdown = (data) => {
-    const breakdown = data.reduce((acc, sub) => {
-      const existing = acc.find(
-        (item) => item.service_name === sub.service_name
-      );
-      if (existing) {
-        existing.price += parseFloat(sub.price);
-      } else {
-        acc.push({
-          service_name: sub.service_name,
-          price: parseFloat(sub.price),
-        });
-      }
-      return acc;
-    }, []);
+  const prepareCostBreakdown = (data: Subscription[]) => {
+    const breakdown = data.reduce(
+      (acc: { service_name: string; price: number }[], sub: Subscription) => {
+        const existing = acc.find(
+          (item: { service_name: string; price: number }) =>
+            item.service_name === sub.service_name
+        );
+        if (existing) {
+          existing.price += sub.price;
+        } else {
+          acc.push({
+            service_name: sub.service_name,
+            price: sub.price,
+          });
+        }
+        return acc;
+      },
+      []
+    );
     setCostBreakdown(breakdown);
   };
 
   return (
-    <div className='p-6 max-w-4xl mx-auto'>
-      <div className='flex justify-between items-center mb-4'>
-        <h1 className='text-2xl font-bold'>Subscription Dashboard</h1>
+    <div className="p-6 max-w-4xl mx-auto">
+      <div className="flex justify-between items-center mb-4">
+        <h1 className="text-2xl font-bold">Subscription Dashboard</h1>
         <Switch checked={darkMode} onCheckedChange={handleThemeToggle} />
       </div>
 
       <Card>
         <CardContent>
-          <h2 className='text-xl font-semibold'>
+          <h2 className="text-xl font-semibold">
             Total Monthly Spend: {totalMonthlySpend}﷼
           </h2>
         </CardContent>
       </Card>
 
-      {/* Cost Breakdown Chart */}
-      <div className='mt-6'>
-        <h3 className='text-lg font-semibold'>Cost Breakdown by Service</h3>
-        <ResponsiveContainer width='100%' height={300}>
+      <div className="mt-6">
+        <h3 className="text-lg font-semibold">Cost Breakdown by Service</h3>
+        <ResponsiveContainer width="100%" height={300}>
           <BarChart data={costBreakdown}>
-            <XAxis dataKey='service_name' />
+            <XAxis dataKey="service_name" />
             <YAxis />
-            <Tooltip />
-            <Bar dataKey='price' fill='#3182CE' />
+            <Tooltip wrapperClassName="rounded-md" />
+            <Bar dataKey="price" fill={darkMode ? "#FFF" : "#000"} />
           </BarChart>
         </ResponsiveContainer>
       </div>
 
-      {/* Renewal Alerts */}
       {renewalAlerts.length > 0 && (
-        <div className='mt-6 p-4 bg-yellow-100 text-yellow-800 rounded'>
-          <h3 className='text-lg font-semibold'>
+        <div className="mt-6 p-4 bg-yellow-100 text-yellow-800 rounded">
+          <h3 className="text-lg font-semibold">
             Upcoming Renewals (Next 7 Days)
           </h3>
           <ul>
             {renewalAlerts.map((sub) => (
               <li key={sub.id}>
-                {sub.service_name} - Renewal on{' '}
+                {sub.service_name} - Renewal on{" "}
                 {new Date(sub.renewal_date).toLocaleDateString()}
               </li>
             ))}
@@ -151,12 +167,12 @@ export default function SubscriptionDashboard() {
         </div>
       )}
 
-      <div className='mt-6 p-4 bg-blue-100 text-blue-800 rounded'>
-        <h3 className='text-lg font-semibold'>Savings Comparison</h3>
+      <div className="mt-6 p-4 bg-blue-100 text-blue-800 rounded">
+        <h3 className="text-lg font-semibold">Savings Comparison</h3>
         {subscriptions.map((sub) =>
-          sub.billing_cycle === 'monthly' ? (
+          sub.billing_cycle === "monthly" ? (
             <p key={sub.id}>
-              {sub.service_name}: If you switch to annual, you’ll save{' '}
+              {sub.service_name}: If you switch to annual, you'll save{" "}
               {(sub.price * 12 * 0.8).toFixed(2)}﷼ per year.
             </p>
           ) : null

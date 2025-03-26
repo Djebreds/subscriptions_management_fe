@@ -1,12 +1,12 @@
-import type { Metadata } from 'next';
-import '../globals.css';
-import { Toaster } from 'sonner';
-import { SidebarProvider, SidebarTrigger } from '@/components/ui/sidebar';
-import { AppSidebar } from '@/components/ui/app-sidebar';
+import type { Metadata } from "next";
+import "../globals.css";
+import { Toaster } from "sonner";
+import { SidebarProvider, SidebarTrigger } from "@/components/ui/sidebar";
+import { AppSidebar } from "@/components/ui/app-sidebar";
 
 export const metadata: Metadata = {
-  title: 'Subscriptions Management Dashboard',
-  description: 'Subscriptions management dashboard',
+  title: "Subscriptions Management Dashboard",
+  description: "Subscriptions management dashboard",
 };
 
 export default function DashboardLayout({
@@ -17,8 +17,8 @@ export default function DashboardLayout({
   return (
     <SidebarProvider>
       <AppSidebar />
-      <main className='w-full'>
-        <SidebarTrigger className='m-3' />
+      <main className="w-full">
+        <SidebarTrigger className="m-3" />
         {children}
         <Toaster />
       </main>

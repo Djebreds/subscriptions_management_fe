@@ -21,6 +21,7 @@ interface Subscription {
   price: number;
   billing_cycle: string;
   renewal_date: string;
+  active: boolean;
 }
 
 export default function SubscriptionDashboard() {
@@ -35,6 +36,7 @@ export default function SubscriptionDashboard() {
     max_price: "",
     min_renewal_date: "",
     max_renewal_date: "",
+    active: "1",
   });
   const [page, setPage] = useState(1);
   const [loading, setLoading] = useState(false);
@@ -44,6 +46,9 @@ export default function SubscriptionDashboard() {
   const [costBreakdown, setCostBreakdown] = useState<
     { service_name: string; price: number }[]
   >([]);
+  const [chartBillingCycle, setChartBillingCycle] = useState<
+    "all" | "monthly" | "annual"
+  >("all");
 
   useEffect(() => {
     loadSubscriptions();
@@ -60,6 +65,7 @@ export default function SubscriptionDashboard() {
         const { data, error } = await getSubscriptions({
           ...filters,
           page: currentPage.toString(),
+          active: "1",
         });
 
         if (error) {
@@ -86,6 +92,7 @@ export default function SubscriptionDashboard() {
       const { data, error } = await getSubscriptions({
         ...filters,
         page: page.toString(),
+        active: "1",
       });
 
       if (error) {
@@ -115,7 +122,10 @@ export default function SubscriptionDashboard() {
     ).getDate();
     const currentDay = today.getDate();
 
-    const total = data.reduce((sum: number, sub: Subscription) => {
+    // Only include active subscriptions
+    const activeData = data.filter((sub) => sub.active);
+
+    const total = activeData.reduce((sum: number, sub: Subscription) => {
       const price = Number(sub.price);
       const renewalDate = new Date(sub.renewal_date);
       const renewalMonth = renewalDate.getMonth();
@@ -155,7 +165,10 @@ export default function SubscriptionDashboard() {
     const sevenDaysFromNow = new Date();
     sevenDaysFromNow.setDate(today.getDate() + 7);
 
-    const upcomingRenewals = data.filter((sub: Subscription) => {
+    // Only include active subscriptions
+    const activeData = data.filter((sub) => sub.active);
+
+    const upcomingRenewals = activeData.filter((sub: Subscription) => {
       const renewalDate = new Date(sub.renewal_date);
       return renewalDate >= today && renewalDate <= oneMonthFromNow;
     });
@@ -185,7 +198,16 @@ export default function SubscriptionDashboard() {
   };
 
   const prepareCostBreakdown = (data: Subscription[]) => {
-    const breakdown = data.reduce(
+    // Only include active subscriptions
+    const activeData = data.filter((sub) => sub.active);
+
+    // Filter by billing cycle if not "all"
+    const filteredData =
+      chartBillingCycle === "all"
+        ? activeData
+        : activeData.filter((sub) => sub.billing_cycle === chartBillingCycle);
+
+    const breakdown = filteredData.reduce(
       (acc: { service_name: string; price: number }[], sub: Subscription) => {
         const existing = acc.find(
           (item: { service_name: string; price: number }) =>
@@ -205,6 +227,12 @@ export default function SubscriptionDashboard() {
     );
     setCostBreakdown(breakdown);
   };
+
+  useEffect(() => {
+    if (subscriptions.length > 0) {
+      prepareCostBreakdown(subscriptions);
+    }
+  }, [chartBillingCycle]);
 
   return (
     <div className="p-6 max-w-4xl mx-auto">
@@ -241,14 +269,44 @@ export default function SubscriptionDashboard() {
                 renewalAlerts.length
               )}
             </div>
-            <p className="text-sm text-muted-foreground mt-1">Next 30 days</p>
+            <div className="flex justify-between items-center">
+              <p className="text-sm text-muted-foreground mt-1">Next 30 days</p>
+              {!loading &&
+                renewalAlerts.filter((sub) =>
+                  isRenewalWithinSevenDays(sub.renewal_date)
+                ).length > 0 && (
+                  <div className="mt-1 bg-red-100 dark:bg-red-950/30 text-red-700 dark:text-red-400 px-2 py-0.5 rounded-full text-xs font-medium">
+                    {
+                      renewalAlerts.filter((sub) =>
+                        isRenewalWithinSevenDays(sub.renewal_date)
+                      ).length
+                    }{" "}
+                    within 7 days
+                  </div>
+                )}
+            </div>
           </CardContent>
         </Card>
       </div>
 
       <Card className="mb-6">
         <CardContent className="pt-6">
-          <h3 className="text-lg font-semibold mb-4">Renewal Calendar</h3>
+          <h3 className="text-lg font-semibold mb-4 flex justify-between items-center">
+            <span>Renewal Calendar</span>
+            {!loading &&
+              renewalAlerts.filter((sub) =>
+                isRenewalWithinSevenDays(sub.renewal_date)
+              ).length > 0 && (
+                <span className="text-sm font-medium bg-red-100 dark:bg-red-950/30 text-red-700 dark:text-red-400 px-3 py-1 rounded-md">
+                  {
+                    renewalAlerts.filter((sub) =>
+                      isRenewalWithinSevenDays(sub.renewal_date)
+                    ).length
+                  }{" "}
+                  urgent renewals
+                </span>
+              )}
+          </h3>
           {loading ? (
             <div className="space-y-4">
               <div className="h-12 bg-gray-200 dark:bg-gray-700 rounded animate-pulse" />
@@ -262,7 +320,7 @@ export default function SubscriptionDashboard() {
                   key={sub.id}
                   className={`flex items-center justify-between p-4 rounded-lg ${
                     isRenewalWithinSevenDays(sub.renewal_date)
-                      ? "bg-red-50 dark:bg-red-950/20 border border-red-200 dark:border-red-800"
+                      ? "bg-red-50 dark:bg-red-950/20 border-2 border-red-300 dark:border-red-700 shadow-sm"
                       : "bg-yellow-50 dark:bg-yellow-950/20"
                   }`}
                 >
@@ -272,7 +330,13 @@ export default function SubscriptionDashboard() {
                       Renewal: {new Date(sub.renewal_date).toLocaleDateString()}
                       {isRenewalWithinSevenDays(sub.renewal_date) && (
                         <span className="ml-2 text-red-600 dark:text-red-400 font-medium">
-                          (Renewing soon!)
+                          (Urgent!{" "}
+                          {Math.ceil(
+                            (new Date(sub.renewal_date).getTime() -
+                              new Date().getTime()) /
+                              (1000 * 60 * 60 * 24)
+                          )}{" "}
+                          days left)
                         </span>
                       )}
                     </p>
@@ -295,12 +359,47 @@ export default function SubscriptionDashboard() {
       </Card>
 
       <div className="mt-6">
-        <h3 className="text-lg font-semibold mb-4">
-          Cost Breakdown by Service
-        </h3>
+        <div className="flex justify-between items-center mb-4">
+          <h3 className="text-lg font-semibold">Cost Breakdown by Service</h3>
+          <div className="flex items-center space-x-4">
+            <div className="flex items-center space-x-2">
+              <button
+                onClick={() => setChartBillingCycle("all")}
+                className={`px-3 py-1 text-sm rounded-md ${
+                  chartBillingCycle === "all"
+                    ? "bg-primary text-primary-foreground"
+                    : "bg-secondary text-secondary-foreground"
+                }`}
+              >
+                All
+              </button>
+              <button
+                onClick={() => setChartBillingCycle("monthly")}
+                className={`px-3 py-1 text-sm rounded-md ${
+                  chartBillingCycle === "monthly"
+                    ? "bg-primary text-primary-foreground"
+                    : "bg-secondary text-secondary-foreground"
+                }`}
+              >
+                Monthly
+              </button>
+              <button
+                onClick={() => setChartBillingCycle("annual")}
+                className={`px-3 py-1 text-sm rounded-md ${
+                  chartBillingCycle === "annual"
+                    ? "bg-primary text-primary-foreground"
+                    : "bg-secondary text-secondary-foreground"
+                }`}
+              >
+                Annual
+              </button>
+            </div>
+          </div>
+        </div>
+
         {loading ? (
           <div className="w-full h-[300px] bg-gray-200 dark:bg-gray-700 animate-pulse rounded" />
-        ) : (
+        ) : costBreakdown.length > 0 ? (
           <ResponsiveContainer width="100%" height={400}>
             <BarChart data={costBreakdown}>
               <XAxis
@@ -331,11 +430,20 @@ export default function SubscriptionDashboard() {
               />
               <Bar
                 dataKey="price"
-                fill={darkMode ? "#FFF" : "#000"}
+                fill={darkMode ? "#8884d8" : "#4f46e5"}
                 radius={[4, 4, 0, 0]}
+                barSize={40}
               />
             </BarChart>
           </ResponsiveContainer>
+        ) : (
+          <div className="flex justify-center items-center h-[300px] bg-gray-50 dark:bg-gray-900 rounded-lg">
+            <p className="text-muted-foreground">
+              No data available for{" "}
+              {chartBillingCycle === "all" ? "any" : chartBillingCycle} billing
+              cycle
+            </p>
+          </div>
         )}
       </div>
 
@@ -353,7 +461,7 @@ export default function SubscriptionDashboard() {
           ) : (
             <div className="space-y-4">
               {subscriptions
-                .filter((sub) => sub.billing_cycle === "monthly")
+                .filter((sub) => sub.billing_cycle === "monthly" && sub.active)
                 .map((sub) => {
                   const savings = calculateAnnualSavings(sub.price);
                   return (
@@ -378,13 +486,108 @@ export default function SubscriptionDashboard() {
                     </div>
                   );
                 })}
-              {subscriptions.filter((sub) => sub.billing_cycle === "monthly")
-                .length === 0 && (
+              {subscriptions.filter(
+                (sub) => sub.billing_cycle === "monthly" && sub.active
+              ).length === 0 && (
                 <p className="text-muted-foreground">
                   No monthly subscriptions found
                 </p>
               )}
             </div>
+          )}
+        </CardContent>
+      </Card>
+
+      <Card className="mt-6">
+        <CardContent className="pt-6">
+          <h3 className="text-lg font-semibold mb-4">
+            Upcoming Renewals at a Glance
+          </h3>
+          {loading ? (
+            <div className="space-y-3">
+              <div className="h-8 bg-gray-200 dark:bg-gray-700 rounded animate-pulse" />
+              <div className="h-8 bg-gray-200 dark:bg-gray-700 rounded animate-pulse" />
+              <div className="h-8 bg-gray-200 dark:bg-gray-700 rounded animate-pulse" />
+            </div>
+          ) : renewalAlerts.length > 0 ? (
+            <div>
+              <ul className="space-y-2">
+                {renewalAlerts.slice(0, 5).map((sub) => {
+                  const renewalDate = new Date(sub.renewal_date);
+                  const monthNames = [
+                    "Jan",
+                    "Feb",
+                    "Mar",
+                    "Apr",
+                    "May",
+                    "Jun",
+                    "Jul",
+                    "Aug",
+                    "Sep",
+                    "Oct",
+                    "Nov",
+                    "Dec",
+                  ];
+                  const month = monthNames[renewalDate.getMonth()];
+                  const day = renewalDate.getDate();
+                  const isUrgent = isRenewalWithinSevenDays(sub.renewal_date);
+
+                  return (
+                    <li
+                      key={sub.id}
+                      className="flex items-center justify-between"
+                    >
+                      <div className="flex items-center">
+                        <div
+                          className={`w-2 h-2 rounded-full mr-2 ${
+                            isUrgent ? "bg-red-500" : "bg-yellow-500"
+                          }`}
+                        ></div>
+                        <span className="font-medium">{sub.service_name}</span>
+                        <span className="text-muted-foreground ml-2">
+                          on {month} {day}
+                        </span>
+                      </div>
+                      <span
+                        className={`${
+                          isUrgent
+                            ? "text-red-600 dark:text-red-400 font-medium"
+                            : "text-muted-foreground"
+                        }`}
+                      >
+                        ﷼ {Number(sub.price).toFixed(2)}
+                      </span>
+                    </li>
+                  );
+                })}
+              </ul>
+
+              {renewalAlerts.length > 5 && (
+                <div className="mt-3 text-sm text-center">
+                  <p className="text-muted-foreground">
+                    + {renewalAlerts.length - 5} more renewals coming up
+                  </p>
+                </div>
+              )}
+
+              <div className="mt-4 pt-3 border-t">
+                <div className="flex justify-between text-sm">
+                  <span className="text-muted-foreground">
+                    Total upcoming in 30 days:
+                  </span>
+                  <span className="font-medium">
+                    ﷼{" "}
+                    {renewalAlerts
+                      .reduce((sum, sub) => sum + Number(sub.price), 0)
+                      .toFixed(2)}
+                  </span>
+                </div>
+              </div>
+            </div>
+          ) : (
+            <p className="text-muted-foreground">
+              No upcoming renewals in the next 30 days
+            </p>
           )}
         </CardContent>
       </Card>

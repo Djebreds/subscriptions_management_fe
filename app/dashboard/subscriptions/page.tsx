@@ -113,10 +113,59 @@ export default function Subscription() {
   const [updateActive, setUpdateActive] = useState("true");
   const [csvImportModalOpen, setCsvImportModalOpen] = useState(false);
   const [priceHistories, setPriceHistories] = useState<PriceHistory[]>([]);
+  const [calculatedPrice, setCalculatedPrice] = useState<string | null>(null);
+  const [updateCalculatedPrice, setUpdateCalculatedPrice] = useState<
+    string | null
+  >(null);
 
   useEffect(() => {
     loadSubscriptions();
   }, [page, filters]);
+
+  const formatPrice = (price: number): string => {
+    return price.toLocaleString("en-US", {
+      minimumFractionDigits: 2,
+      maximumFractionDigits: 2,
+    });
+  };
+
+  useEffect(() => {
+    if (price && billingCycle) {
+      const basePrice = parseFloat(price);
+      if (!isNaN(basePrice) && basePrice > 0) {
+        if (billingCycle === "monthly") {
+          const annualPrice = basePrice * 12;
+          setCalculatedPrice(`Annual: ${formatPrice(annualPrice)}﷼`);
+        } else {
+          const monthlyPrice = basePrice / 12;
+          setCalculatedPrice(`Monthly: ${formatPrice(monthlyPrice)}﷼`);
+        }
+      } else {
+        setCalculatedPrice(null);
+      }
+    } else {
+      setCalculatedPrice(null);
+    }
+  }, [price, billingCycle]);
+
+  useEffect(() => {
+    if (updatePrice && updateBillingCycle) {
+      const basePrice = parseFloat(updatePrice);
+      if (!isNaN(basePrice) && basePrice > 0) {
+        if (updateBillingCycle === "monthly") {
+          const annualPrice = basePrice * 12;
+          setUpdateCalculatedPrice(`Annual: ${formatPrice(annualPrice)}﷼`);
+        } else {
+          const monthlyPrice = basePrice / 12;
+          setUpdateCalculatedPrice(`Monthly: ${formatPrice(monthlyPrice)}﷼`);
+        }
+      } else {
+        setUpdateCalculatedPrice(null);
+      }
+    } else {
+      setUpdateCalculatedPrice(null);
+    }
+  }, [updatePrice, updateBillingCycle]);
 
   const loadSubscriptions = async (overrideFilters = filters) => {
     try {
@@ -402,14 +451,24 @@ export default function Subscription() {
               </div>
 
               <div className="mb-3">
-                <Input
-                  placeholder="Price"
-                  type="number"
-                  value={price}
-                  onChange={(e) => setPrice(e.target.value)}
-                />
+                <div className="flex items-center">
+                  <Input
+                    placeholder="Price"
+                    type="number"
+                    value={price}
+                    onChange={(e) => setPrice(e.target.value)}
+                  />
+                  <span className="ml-2 text-sm">
+                    {billingCycle === "monthly" ? "﷼/month" : "﷼/year"}
+                  </span>
+                </div>
                 {errors.price && (
                   <p className="text-red-500 text-sm">{errors.price}</p>
+                )}
+                {calculatedPrice && (
+                  <p className="text-blue-500 text-sm mt-1 font-medium bg-blue-50 p-1.5 rounded">
+                    {calculatedPrice}
+                  </p>
                 )}
               </div>
 
@@ -531,14 +590,24 @@ export default function Subscription() {
             </div>
 
             <div className="mb-3">
-              <Input
-                placeholder="Price"
-                type="number"
-                value={updatePrice}
-                onChange={(e) => setUpdatePrice(e.target.value)}
-              />
+              <div className="flex items-center">
+                <Input
+                  placeholder="Price"
+                  type="number"
+                  value={updatePrice}
+                  onChange={(e) => setUpdatePrice(e.target.value)}
+                />
+                <span className="ml-2 text-sm">
+                  {updateBillingCycle === "monthly" ? "﷼/month" : "﷼/year"}
+                </span>
+              </div>
               {errors.price && (
                 <p className="text-red-500 text-sm">{errors.price}</p>
+              )}
+              {updateCalculatedPrice && (
+                <p className="text-blue-500 text-sm mt-1 font-medium bg-blue-50 p-1.5 rounded">
+                  {updateCalculatedPrice}
+                </p>
               )}
             </div>
 

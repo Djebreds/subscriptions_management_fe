@@ -1,8 +1,13 @@
-import axios from 'axios';
-import { refreshToken } from './auth';
+import axios from "axios";
+import { refreshToken } from "./auth";
+
+interface QueueItem {
+  resolve: (token: string) => void;
+  reject: (error: unknown) => void;
+}
 
 let isRefreshing = false;
-let failedQueue: any[] = [];
+let failedQueue: QueueItem[] = [];
 
 const api = axios.create({
   baseURL: process.env.NEXT_PUBLIC_API_BASE_URL,
@@ -11,10 +16,10 @@ const api = axios.create({
 api.interceptors.request.use(
   (config) => {
     const token =
-      typeof window !== 'undefined' ? localStorage.getItem('access') : null;
+      typeof window !== "undefined" ? localStorage.getItem("access") : null;
 
     if (token) {
-      config.headers['Authorization'] = `Bearer ${token}`;
+      config.headers["Authorization"] = `Bearer ${token}`;
     }
 
     return config;
@@ -30,11 +35,10 @@ api.interceptors.response.use(
 
     if (err.response?.status === 401 && !originalRequest._retry) {
       if (isRefreshing) {
-        console.log('OAI OAI');
         return new Promise((resolve, reject) => {
           failedQueue.push({ resolve, reject });
         }).then((token) => {
-          originalRequest.headers['Authorization'] = `Bearer ${token}`;
+          originalRequest.headers["Authorization"] = `Bearer ${token}`;
 
           return api(originalRequest);
         });
@@ -46,16 +50,16 @@ api.interceptors.response.use(
       try {
         const newAccessToken = await refreshToken();
 
-        localStorage.setItem('access', newAccessToken);
+        localStorage.setItem("access", newAccessToken);
 
         api.defaults.headers.common[
-          'Authorization'
+          "Authorization"
         ] = `Bearer ${newAccessToken}`;
 
         failedQueue.forEach((prom) => prom.resolve(newAccessToken));
         failedQueue = [];
 
-        originalRequest.headers['Authorization'] = `Bearer ${newAccessToken}`;
+        originalRequest.headers["Authorization"] = `Bearer ${newAccessToken}`;
 
         return api(originalRequest);
       } catch (refreshError) {
